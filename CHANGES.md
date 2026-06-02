@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- No unreleased changes.
+
+## 0.1.1 - 2026-06-02
+
 - replace Moodle core registration wording with MoodiyCloud-specific form copy
 
 ## 0.1.0 - 2025-06-23

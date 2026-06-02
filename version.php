@@ -25,8 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'tool_moodiyregistration';
-$plugin->release = '0.1.0';
-$plugin->version = 2025062301;
+$plugin->release = '0.1.1';
+$plugin->version = 2026060200;
 $plugin->requires = 2022112800;
 $plugin->maturity = MATURITY_ALPHA;
 $plugin->supported = [405, 501];
