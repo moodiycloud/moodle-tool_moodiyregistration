@@ -59,6 +59,15 @@ class registration {
     /** @var string Shared stale-timestamp callback message mirrored by core and mixed-version fallbacks. */
     const STALE_TIMESTAMP_MESSAGE = 'Stale timestamp';
 
+    /** @var string Do not publish the site listing. */
+    const SITE_PRIVACY_NOT_PUBLISHED = 'notdisplayed';
+
+    /** @var string Publish only the organisation name. */
+    const SITE_PRIVACY_NAME_PUBLISHED = 'named';
+
+    /** @var string Publish the organisation name and site link. */
+    const SITE_PRIVACY_LINK_PUBLISHED = 'linked';
+
     /**
      * Checks if site is registered
      *
@@ -77,24 +86,42 @@ class registration {
      */
     public static function get_site_organisation_type_options(): array {
         return [
-            'wholeuniversity' => get_string('siteorganisationtype:wholeuniversity', 'hub'),
-            'universitydepartment' => get_string('siteorganisationtype:universitydepartment', 'hub'),
-            'college' => get_string('siteorganisationtype:college', 'hub'),
-            'collegedepartment' => get_string('siteorganisationtype:collegedepartment', 'hub'),
-            'highschool' => get_string('siteorganisationtype:highschool', 'hub'),
-            'highschooldepartment' => get_string('siteorganisationtype:highschooldepartment', 'hub'),
-            'primaryschool' => get_string('siteorganisationtype:primaryschool', 'hub'),
-            'independentteacher' => get_string('siteorganisationtype:independentteacher', 'hub'),
-            'companyinternal' => get_string('siteorganisationtype:companyinternal', 'hub'),
-            'companydepartment' => get_string('siteorganisationtype:companydepartment', 'hub'),
-            'commercialcourseprovider' => get_string('siteorganisationtype:commercialcourseprovider', 'hub'),
-            'other' => get_string('siteorganisationtype:other', 'hub'),
-            'highschooldistrict' => get_string('siteorganisationtype:highschooldistrict', 'hub'),
-            'government' => get_string('siteorganisationtype:government', 'hub'),
-            'charityornotforprofit' => get_string('siteorganisationtype:charityornotforprofit', 'hub'),
-            'charterschool' => get_string('siteorganisationtype:charterschool', 'hub'),
-            'schooldistrict' => get_string('siteorganisationtype:schooldistrict', 'hub'),
-            'hospital' => get_string('siteorganisationtype:hospital', 'hub'),
+            'wholeuniversity' => get_string('siteorganisationtype:wholeuniversity', 'tool_moodiyregistration'),
+            'universitydepartment' => get_string('siteorganisationtype:universitydepartment', 'tool_moodiyregistration'),
+            'college' => get_string('siteorganisationtype:college', 'tool_moodiyregistration'),
+            'collegedepartment' => get_string('siteorganisationtype:collegedepartment', 'tool_moodiyregistration'),
+            'highschool' => get_string('siteorganisationtype:highschool', 'tool_moodiyregistration'),
+            'highschooldepartment' => get_string('siteorganisationtype:highschooldepartment', 'tool_moodiyregistration'),
+            'primaryschool' => get_string('siteorganisationtype:primaryschool', 'tool_moodiyregistration'),
+            'independentteacher' => get_string('siteorganisationtype:independentteacher', 'tool_moodiyregistration'),
+            'companyinternal' => get_string('siteorganisationtype:companyinternal', 'tool_moodiyregistration'),
+            'companydepartment' => get_string('siteorganisationtype:companydepartment', 'tool_moodiyregistration'),
+            'commercialcourseprovider' => get_string(
+                'siteorganisationtype:commercialcourseprovider',
+                'tool_moodiyregistration'
+            ),
+            'other' => get_string('siteorganisationtype:other', 'tool_moodiyregistration'),
+            'highschooldistrict' => get_string('siteorganisationtype:highschooldistrict', 'tool_moodiyregistration'),
+            'government' => get_string('siteorganisationtype:government', 'tool_moodiyregistration'),
+            'charityornotforprofit' => get_string('siteorganisationtype:charityornotforprofit', 'tool_moodiyregistration'),
+            'charterschool' => get_string('siteorganisationtype:charterschool', 'tool_moodiyregistration'),
+            'schooldistrict' => get_string('siteorganisationtype:schooldistrict', 'tool_moodiyregistration'),
+            'hospital' => get_string('siteorganisationtype:hospital', 'tool_moodiyregistration'),
+        ];
+    }
+
+    /**
+     * Get the options for site privacy form element to use in registration form.
+     *
+     * Values match the Moodle site registration constants so existing stored data remains valid.
+     *
+     * @return array
+     */
+    public static function get_site_privacy_options(): array {
+        return [
+            self::SITE_PRIVACY_NOT_PUBLISHED => get_string('siteprivacynotpublished', 'tool_moodiyregistration'),
+            self::SITE_PRIVACY_NAME_PUBLISHED => get_string('siteprivacypublished', 'tool_moodiyregistration'),
+            self::SITE_PRIVACY_LINK_PUBLISHED => get_string('siteprivacylinked', 'tool_moodiyregistration'),
         ];
     }
 

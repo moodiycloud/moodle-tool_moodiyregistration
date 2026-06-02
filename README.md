@@ -3,6 +3,9 @@
 `tool_moodiyregistration` is a Moodle admin tool plugin that registers a Moodle
 site with MoodiyCloud and keeps the registration record up to date.
 
+This is a MoodiyCloud integration. It is separate from Moodle's official site
+registration service.
+
 ## What the plugin does
 
 - registers the Moodle site with MoodiyCloud
@@ -79,6 +82,8 @@ Recommended submission values:
 
 This plugin integrates with MoodiyCloud services at `https://moodiycloud.com`
 and `https://api.moodiycloud.com`.
+
+It does not register the site with Moodle's official site registration service.
 
 The plugin stores a local registration record and site registration settings. It
 also sends registration data to MoodiyCloud, including the configured contact
