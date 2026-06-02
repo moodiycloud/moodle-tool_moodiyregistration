@@ -38,7 +38,7 @@ $string['eventmoodiyunregistration_desc'] = 'User {$a->userid} has unregistered 
 $string['organisationname'] = 'Organisation name';
 $string['organisationname_help'] = 'The organisation name is shown in the site listing if you choose to have your site listed publicly.';
 $string['policyagreed'] = 'MoodiyCloud privacy notice and data processing agreement';
-$string['policyagreeddesc'] = 'I agree to the <a href="{$a}" target="_blank">MoodiyCloud privacy notice and data processing agreement</a>';
+$string['policyagreeddesc'] = 'I agree to the <a href="{$a}" target="_blank" rel="noopener noreferrer">MoodiyCloud privacy notice and data processing agreement</a>';
 $string['pleaserefreshregistration'] = 'Your site is registered. Registration last updated {$a}.<br />Your registration will be kept up to date. You can also manually update your registration at any time.';
 $string['pleaserefreshregistrationunknown'] = 'Your site has been registered but the registration date is unknown. Please update your registration using the \'Update registration\' button.';
 $string['pluginname'] = 'Moodiy registration';
