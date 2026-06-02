@@ -46,6 +46,35 @@ php admin/cli/upgrade.php
 - Complete the registration form and confirm the registration flow with MoodiyCloud.
 - After registration, Moodle will keep the site record updated using scheduled tasks.
 
+## Moodle plugins directory submission
+
+Suggested short description:
+
+```text
+Register a Moodle site with MoodiyCloud and keep its site metadata up to date.
+```
+
+Suggested full description:
+
+```text
+Moodiy registration is a Moodle administration tool that registers a Moodle site
+with MoodiyCloud and keeps the registration record current. It stores the local
+site UUID, exposes verification/update endpoints used by MoodiyCloud, and runs
+scheduled tasks that update MoodiyCloud when the site URL or Moodle/plugin state
+changes.
+```
+
+Recommended submission values:
+
+- Plugin type: `tool`
+- Component: `tool_moodiyregistration`
+- Website URL: `https://moodiycloud.com`
+- Source control URL: `https://github.com/moodiycloud/moodle-tool_moodiyregistration`
+- Bug tracker URL: `https://github.com/moodiycloud/moodle-tool_moodiyregistration/issues`
+- Documentation URL: `https://github.com/moodiycloud/moodle-tool_moodiyregistration#readme`
+- License: GNU GPL v3 or later
+- Supported Moodle versions: Moodle 4.5, 5.0, and 5.1
+
 ## External service and privacy
 
 This plugin integrates with MoodiyCloud services at `https://moodiycloud.com`
@@ -57,6 +86,12 @@ email address and aggregated site metadata required to maintain the site record.
 
 See the plugin privacy provider and language strings for the current metadata
 declaration.
+
+The plugin requires access to MoodiyCloud to complete the external registration
+confirmation flow. Moodle.org reviewers can request temporary reviewer access or
+confirmation support via `support@moodiycloud.com`; any private test credentials
+should be shared through the Moodle.org approval issue rather than committed to
+this repository.
 
 ## Issue tracker and support
 
