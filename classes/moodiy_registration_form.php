@@ -64,7 +64,8 @@ class moodiy_registration_form extends \moodleform {
         // Fields that need to be highlighted.
         $highlightfields = \core\hub\registration::get_new_registration_fields();
 
-        $mform->addElement('header', 'moodle', get_string('registrationinfo', 'hub'));
+        $mform->addElement('header', 'moodle', get_string('registrationinfo', 'tool_moodiyregistration'));
+        $mform->addElement('static', 'registrationnotice', '', get_string('registrationnotice', 'tool_moodiyregistration'));
 
         $mform->addElement(
             'text',
@@ -78,76 +79,92 @@ class moodiy_registration_form extends \moodleform {
         $mform->addElement(
             'text',
             'admin_email',
-            get_string('siteemail', 'hub'),
+            get_string('siteemail', 'tool_moodiyregistration'),
             ['class' => 'registration_textfield']
         );
         $mform->addRule('admin_email', $strrequired, 'required', null, 'client');
         $mform->setType('admin_email', PARAM_EMAIL);
-        $mform->addHelpButton('admin_email', 'siteemail', 'hub');
+        $mform->addHelpButton('admin_email', 'siteemail', 'tool_moodiyregistration');
 
         $organisationtypes = \tool_moodiyregistration\registration::get_site_organisation_type_options();
         \core_collator::asort($organisationtypes);
         // Prepend the empty/default value here. We are not using array_merge to preserve keys.
-        $organisationtypes = ['donotshare' => get_string('siteorganisationtype:donotshare', 'hub')] + $organisationtypes;
-        $mform->addElement('select', 'organisation_type', get_string('siteorganisationtype', 'hub'), $organisationtypes);
+        $organisationtypes = [
+            'donotshare' => get_string('siteorganisationtype:donotshare', 'tool_moodiyregistration'),
+        ] + $organisationtypes;
+        $mform->addElement(
+            'select',
+            'organisation_type',
+            get_string('siteorganisationtype', 'tool_moodiyregistration'),
+            $organisationtypes
+        );
         $mform->setType('organisation_type', PARAM_ALPHANUM);
-        $mform->addHelpButton('organisation_type', 'siteorganisationtype', 'hub');
+        $mform->addHelpButton('organisation_type', 'siteorganisationtype', 'tool_moodiyregistration');
 
-        $mform->addElement('select', 'privacy', get_string('siteprivacy', 'hub'), \core\hub\registration::site_privacy_options());
+        $mform->addElement(
+            'select',
+            'privacy',
+            get_string('siteprivacy', 'tool_moodiyregistration'),
+            \tool_moodiyregistration\registration::get_site_privacy_options()
+        );
         $mform->setType('privacy', PARAM_ALPHA);
-        $mform->addHelpButton('privacy', 'siteprivacy', 'hub');
+        $mform->addHelpButton('privacy', 'siteprivacy', 'tool_moodiyregistration');
         unset($options);
 
         $mform->addElement(
             'textarea',
             'description',
-            get_string('sitedesc', 'hub'),
+            get_string('sitedesc', 'tool_moodiyregistration'),
             ['rows' => 3, 'cols' => 41]
         );
         $mform->setType('description', PARAM_TEXT);
-        $mform->addHelpButton('description', 'sitedesc', 'hub');
+        $mform->addHelpButton('description', 'sitedesc', 'tool_moodiyregistration');
 
         $languages = get_string_manager()->get_list_of_languages();
         \core_collator::asort($languages);
-        $mform->addElement('select', 'language', get_string('sitelang', 'hub'), $languages);
+        $mform->addElement('select', 'language', get_string('sitelang', 'tool_moodiyregistration'), $languages);
         $mform->setType('language', PARAM_ALPHANUMEXT);
-        $mform->addHelpButton('language', 'sitelang', 'hub');
+        $mform->addHelpButton('language', 'sitelang', 'tool_moodiyregistration');
 
         $countries = ['' => ''] + get_string_manager()->get_list_of_countries();
-        $mform->addElement('select', 'country_code', get_string('sitecountry', 'hub'), $countries);
+        $mform->addElement('select', 'country_code', get_string('sitecountry', 'tool_moodiyregistration'), $countries);
         $mform->setType('country_code', PARAM_ALPHANUMEXT);
-        $mform->addHelpButton('country_code', 'sitecountry', 'hub');
+        $mform->addHelpButton('country_code', 'sitecountry', 'tool_moodiyregistration');
         $mform->addRule('country_code', $strrequired, 'required', null, 'client');
 
         $mform->addElement(
             'checkbox',
             'policyagreed',
-            get_string('policyagreed', 'hub'),
-            get_string('policyagreeddesc', 'hub', \tool_moodiyregistration\registration::MOODIYURL . '/privacy-policy')
+            get_string('policyagreed', 'tool_moodiyregistration'),
+            get_string(
+                'policyagreeddesc',
+                'tool_moodiyregistration',
+                \tool_moodiyregistration\registration::MOODIYURL . '/privacy-policy'
+            )
         );
         $mform->addRule('policyagreed', $strrequired, 'required', null, 'client');
 
-        $mform->addElement('static', 'urlstring', get_string('siteurl', 'hub'), $siteinfo['site_url']);
-        $mform->addHelpButton('urlstring', 'siteurl', 'hub');
+        $mform->addElement('static', 'urlstring', get_string('siteurl', 'tool_moodiyregistration'), $siteinfo['site_url']);
+        $mform->addHelpButton('urlstring', 'siteurl', 'tool_moodiyregistration');
 
-        $mform->addElement('header', 'sitestats', get_string('sendfollowinginfo', 'hub'));
+        $mform->addElement('header', 'sitestats', get_string('sendfollowinginfo', 'tool_moodiyregistration'));
         $mform->setExpanded('sitestats', !empty($highlightfields));
 
         // Display statistic that are going to be retrieve by the sites directory.
         $mform->addElement(
             'static',
             'siteinfosummary',
-            get_string('sendfollowinginfo', 'hub'),
+            get_string('sendfollowinginfo', 'tool_moodiyregistration'),
             \tool_moodiyregistration\registration::get_stats_summary($siteinfo)
         );
 
         // Check if it's a first registration or update.
         if (registration::is_registered()) {
-            $buttonlabel = get_string('updatesiteregistration', 'core_hub');
+            $buttonlabel = get_string('updatesiteregistration', 'tool_moodiyregistration');
             $mform->addElement('hidden', 'update', true);
             $mform->setType('update', PARAM_BOOL);
         } else {
-            $buttonlabel = get_string('register', 'core_admin');
+            $buttonlabel = get_string('registerbutton', 'tool_moodiyregistration');
         }
 
         $this->add_action_buttons(false, $buttonlabel);

@@ -26,6 +26,9 @@ site UUID, exposes verification/update endpoints used by MoodiyCloud, and runs
 scheduled tasks that update MoodiyCloud when the site URL or Moodle/plugin state
 changes.
 
+This is a MoodiyCloud integration and is separate from Moodle's official site
+registration service.
+
 The plugin integrates with MoodiyCloud services at `https://moodiycloud.com` and
 `https://api.moodiycloud.com`. It sends the configured contact email address and
 aggregated site metadata required to maintain the registration record.
