@@ -16,8 +16,16 @@ jobs:
       disable_behat: false
       disable_grunt: false
       disable_release: true
-      # supported = [405, 503] declares Moodle 4.5-5.3, but the reusable workflow's
-      # auto-derived matrix excludes Moodle main (5.3dev) by default, so it stops at
-      # the latest stable (5.2). List the branches explicitly to also test against
-      # Moodle 5.3dev (main). Add MOODLE_503_STABLE here once Moodle branches 5.3.
+      # supported = [405, 503] declares Moodle 4.5-5.3. The reusable workflow's
+      # auto-derived matrix excludes Moodle main (5.3dev) by default, so it would
+      # otherwise stop at the latest stable (5.2). List the branches explicitly so
+      # CI also runs phpunit/behat against Moodle 5.3dev (main); those jobs pass.
+      #
+      # KNOWN (accepted): with main in the matrix it becomes the "highest" branch,
+      # so the single-shot lint jobs (phpcs/phpdoc/validate/mustache/savepoints/
+      # grunt/phpmd/phplint) try to pull ghcr.io/catalyst/snapshot-main-mariadb,
+      # which Catalyst does not publish (main has a pgsql snapshot only). Those
+      # jobs therefore show red here even though they pass on the stable branches
+      # and locally. Replace 'main' with 'MOODLE_503_STABLE' once Moodle branches
+      # 5.3 stable (~Oct 2026), which restores fully-green CI on the 5.3 line.
       moodle_branches: 'MOODLE_405_STABLE MOODLE_500_STABLE MOODLE_501_STABLE MOODLE_502_STABLE main'
