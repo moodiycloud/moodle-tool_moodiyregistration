@@ -10,7 +10,7 @@ record for `tool_moodiyregistration`.
 - Plugin type: Administration tool (`tool`)
 - Release name: `0.2.0`
 - Version: `2026060700`
-- Maturity: Alpha
+- Maturity: Stable
 - Supported Moodle versions: 4.5, 5.0, 5.1, 5.2, 5.3
 - License: GNU GPL v3 or later
 

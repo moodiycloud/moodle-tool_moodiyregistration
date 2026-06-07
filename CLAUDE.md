@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Moodle admin tool plugin (`tool_moodiyregistration`) that handles site registration and verification between Moodle instances and the Moodiy external service. Installed at `{moodle}/admin/tool/moodiyregistration/`. Supports Moodle 4.5–5.3 (`supported = [405, 503]`, requires 4.5), currently at v0.2.0 (alpha).
+Moodle admin tool plugin (`tool_moodiyregistration`) that handles site registration and verification between Moodle instances and the Moodiy external service. Installed at `{moodle}/admin/tool/moodiyregistration/`. Supports Moodle 4.5–5.3 (`supported = [405, 503]`, requires 4.5), currently at v0.2.0 (stable).
 
 ## Testing
 

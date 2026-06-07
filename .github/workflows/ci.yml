@@ -16,3 +16,8 @@ jobs:
       disable_behat: false
       disable_grunt: false
       disable_release: true
+      # supported = [405, 503] declares Moodle 4.5-5.3, but the reusable workflow's
+      # auto-derived matrix excludes Moodle main (5.3dev) by default, so it stops at
+      # the latest stable (5.2). List the branches explicitly to also test against
+      # Moodle 5.3dev (main). Add MOODLE_503_STABLE here once Moodle branches 5.3.
+      moodle_branches: 'MOODLE_405_STABLE MOODLE_500_STABLE MOODLE_501_STABLE MOODLE_502_STABLE main'

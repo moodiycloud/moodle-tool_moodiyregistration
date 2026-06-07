@@ -8,6 +8,7 @@
 
 - declare support for Moodle 5.2 and 5.3 (supported range Moodle 4.5–5.3)
 - raise the minimum required Moodle to 4.5 to match the supported range
+- promote plugin maturity from alpha to stable
 
 ## 0.1.1 - 2026-06-02
 
