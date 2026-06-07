@@ -33,7 +33,7 @@ use tool_moodiyregistration\event\update_request;
 /**
  * Unit tests for event functionality.
  */
-class events_test extends \advanced_testcase {
+final class events_test extends \advanced_testcase {
     /**
      * Set up tests.
      */

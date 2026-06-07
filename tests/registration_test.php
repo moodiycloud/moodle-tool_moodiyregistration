@@ -32,7 +32,7 @@ use tool_moodiyregistration\api;
 /**
  * Unit tests for registration functionality.
  */
-class registration_test extends \advanced_testcase {
+final class registration_test extends \advanced_testcase {
     /**
      * @var \stdClass Admin user for tests.
      */
