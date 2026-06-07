@@ -4,6 +4,11 @@
 
 - No unreleased changes.
 
+## 0.2.0 - 2026-06-07
+
+- declare support for Moodle 5.2 and 5.3 (supported range Moodle 4.5–5.3)
+- raise the minimum required Moodle to 4.5 to match the supported range
+
 ## 0.1.1 - 2026-06-02
 
 - replace Moodle core registration wording with MoodiyCloud-specific form copy
