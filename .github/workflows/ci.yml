@@ -1,18 +1,144 @@
 # .github/workflows/ci.yml
+#
+# Standard Moodle plugin CI, using the official moodlehq/moodle-plugin-ci recipe
+# (https://moodlehq.github.io/moodle-plugin-ci/). Moodle is installed from git for
+# each (branch, php, database) combination, so there is no dependency on prebuilt
+# snapshot images and every check runs per-branch. This lets us test against the
+# in-development Moodle 5.3 line (the `main` branch) on both databases — the case
+# the Catalyst reusable workflow could not cover (it has no main+mariadb snapshot).
+#
+# Matches the local `make pre-pr` runner, which also uses moodle-plugin-ci.
+# When Moodle branches 5.3 stable, add a `MOODLE_503_STABLE` row to the matrix.
 name: Moodiy Registration CI
 
 on: [push, pull_request]
 
 jobs:
-  ci:
-    uses: catalyst/catalyst-moodle-workflows/.github/workflows/ci.yml@main
-    #secrets:
-    # Required if you plan to publish (uncomment the below)
-    # moodle_org_token: ${{ secrets.MOODLE_ORG_TOKEN }}
-    with:
-      codechecker_max_warnings: 0
-      disable_phpdoc: false
-      disable_phpcs: false
-      disable_behat: false
-      disable_grunt: false
-      disable_release: true
+  test:
+    runs-on: ubuntu-22.04
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MYSQL_USER: 'root'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+          MYSQL_CHARACTER_SET_SERVER: "utf8mb4"
+          MYSQL_COLLATION_SERVER: "utf8mb4_unicode_ci"
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Moodle 4.5 LTS (PHP 8.1–8.3)
+          - {moodle-branch: 'MOODLE_405_STABLE', php: '8.1', database: 'pgsql'}
+          - {moodle-branch: 'MOODLE_405_STABLE', php: '8.3', database: 'mariadb'}
+          # Moodle 5.0 (PHP 8.2–8.4)
+          - {moodle-branch: 'MOODLE_500_STABLE', php: '8.2', database: 'mariadb'}
+          - {moodle-branch: 'MOODLE_500_STABLE', php: '8.4', database: 'pgsql'}
+          # Moodle 5.1 (PHP 8.2–8.4)
+          - {moodle-branch: 'MOODLE_501_STABLE', php: '8.2', database: 'pgsql'}
+          - {moodle-branch: 'MOODLE_501_STABLE', php: '8.4', database: 'mariadb'}
+          # Moodle 5.2 (PHP 8.3–8.4)
+          - {moodle-branch: 'MOODLE_502_STABLE', php: '8.3', database: 'mariadb'}
+          - {moodle-branch: 'MOODLE_502_STABLE', php: '8.4', database: 'pgsql'}
+          # Moodle 5.3dev / main (PHP 8.3–8.4) — both databases
+          - {moodle-branch: 'main', php: '8.3', database: 'pgsql'}
+          - {moodle-branch: 'main', php: '8.4', database: 'mariadb'}
+
+    name: ${{ matrix.moodle-branch }} / php${{ matrix.php }} / ${{ matrix.database }}
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pgsql, mysqli, zip, gd, soap, intl
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> $GITHUB_ENV
+
+      - name: Install moodle-plugin-ci
+        run: moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+        env:
+          DB: ${{ matrix.database }}
+          MOODLE_BRANCH: ${{ matrix.moodle-branch }}
+
+      - name: PHP Lint
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phplint
+
+      - name: PHP Mess Detector
+        continue-on-error: true # informational; does not fail the build
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpmd
+
+      - name: Moodle Code Checker
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpcs --max-warnings 0
+
+      - name: Moodle PHPDoc Checker
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpdoc --max-warnings 0
+
+      - name: Validating
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci validate
+
+      - name: Check upgrade savepoints
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci savepoints
+
+      - name: Mustache Lint
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci mustache
+
+      - name: Grunt
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci grunt --max-lint-warnings 0
+
+      - name: PHPUnit tests
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci phpunit --fail-on-warning
+
+      - name: Behat features
+        id: behat
+        if: ${{ !cancelled() }}
+        run: moodle-plugin-ci behat --profile chrome --scss-deprecations
+
+      - name: Upload Behat Faildump
+        if: ${{ failure() && steps.behat.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Behat Faildump (${{ join(matrix.*, ', ') }})
+          path: ${{ github.workspace }}/moodledata/behat_dump
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Mark cancelled jobs as failed.
+        if: ${{ cancelled() }}
+        run: exit 1

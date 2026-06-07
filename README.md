@@ -20,6 +20,8 @@ Current plugin metadata declares support for:
 - Moodle `4.5`
 - Moodle `5.0`
 - Moodle `5.1`
+- Moodle `5.2`
+- Moodle `5.3`
 
 ## Installation
 

@@ -8,10 +8,10 @@ record for `tool_moodiyregistration`.
 - Name: Moodiy registration
 - Component: `tool_moodiyregistration`
 - Plugin type: Administration tool (`tool`)
-- Release name: `0.1.1`
-- Version: `2026060200`
-- Maturity: Alpha
-- Supported Moodle versions: 4.5, 5.0, 5.1
+- Release name: `0.2.0`
+- Version: `2026060700`
+- Maturity: Stable
+- Supported Moodle versions: 4.5, 5.0, 5.1, 5.2, 5.3
 - License: GNU GPL v3 or later
 
 ## Short description
@@ -53,6 +53,7 @@ Moodle.org approval issue, not in the public repository.
 
 ## Release notes
 
+- Declared support for Moodle 5.2 and 5.3 and raised the minimum required Moodle to 4.5.
 - Replaced Moodle core registration wording with MoodiyCloud-specific form copy.
 - Initial alpha release of the MoodiyCloud site registration plugin.
 - Metadata-based privacy provider for site registration and MoodiyCloud data exchange.
