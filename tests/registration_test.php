@@ -585,10 +585,11 @@ final class registration_test extends \advanced_testcase {
         $this->assertSame('pending', $result['remote_sync_status']);
         $this->assertTrue($result['recreated']);
 
-        // https://github.com/moodiycloud/moodiy/issues/1107 -- the reason must
-        // leave this function. It used to exist only inside a debugging() call,
-        // which is silent on a provisioned box (DEBUG_DEVELOPER off), so the
-        // caller had a status word and no way to say WHY Moodiy was not reached.
+        // The reason must LEAVE this function. It used to exist only inside a
+        // debugging() call, which is silent on a provisioned box
+        // (DEBUG_DEVELOPER off), so the caller had a status word and no way to
+        // say why Moodiy was not reached.
+        // See https://github.com/moodiycloud/moodiy/issues/1107.
         $this->assertArrayHasKey('remote_sync_error', $result);
         $this->assertStringContainsString('Remote API unavailable', (string) $result['remote_sync_error']);
 
