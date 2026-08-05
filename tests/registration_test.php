@@ -547,6 +547,8 @@ final class registration_test extends \advanced_testcase {
         $this->assertSame(0, $result['deleted_records']);
         $this->assertTrue($result['recreated']);
         $this->assertSame('ok', $result['remote_sync_status']);
+        // No error to report when the sync landed.
+        $this->assertNull($result['remote_sync_error']);
 
         $records = $DB->get_records('tool_moodiyregistration');
         $this->assertCount(1, $records);
@@ -582,6 +584,14 @@ final class registration_test extends \advanced_testcase {
         $this->assertSame('ok', $result['status']);
         $this->assertSame('pending', $result['remote_sync_status']);
         $this->assertTrue($result['recreated']);
+
+        // The reason must LEAVE this function. It used to exist only inside a
+        // debugging() call, which is silent on a provisioned box
+        // (DEBUG_DEVELOPER off), so the caller had a status word and no way to
+        // say why Moodiy was not reached.
+        // See https://github.com/moodiycloud/moodiy/issues/1107.
+        $this->assertArrayHasKey('remote_sync_error', $result);
+        $this->assertStringContainsString('Remote API unavailable', (string) $result['remote_sync_error']);
 
         $record = $DB->get_record('tool_moodiyregistration', ['site_uuid' => 'pending-uuid-123456']);
         $this->assertNotFalse($record);

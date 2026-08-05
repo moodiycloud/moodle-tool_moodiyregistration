@@ -956,21 +956,41 @@ class registration {
         $siteinfo = self::get_siteinfo();
         $siteinfo['site_uuid'] = $uuid;
         $remotesynced = false;
+        $remotesyncerror = null;
         try {
             $api = self::get_api_wrapper();
             $api->update_registration($record, $siteinfo);
             self::remember_automatic_update_payload_hash($siteinfo);
             $remotesynced = true;
         } catch (moodle_exception $e) {
+            // The catch stays: a failed remote sync must NOT roll back the local
+            // repair, which is valid on its own and is what the next scheduled
+            // run retries from.
+            //
+            // What changed is that the reason no longer dies here. This used to
+            // be a bare debugging() call, which nothing reads: on a provisioned
+            // box DEBUG_DEVELOPER is off, so the only trace of "Moodiy never
+            // heard about this site" was a `remote_sync_status` field that no
+            // caller inspected. The Ansible role printed rc=0 (registered) and
+            // the whole estate went four days without a single Premium site
+            // registering.
+            //
+            // Carry the message out so the caller can print something
+            // actionable instead of a status word.
+            // See https://github.com/moodiycloud/moodiy/issues/1107.
+            $remotesyncerror = $e->getMessage();
             debugging(
                 'Local internal site registration was repaired, but the remote Moodiy sync is pending: ' .
-                $e->getMessage(),
+                $remotesyncerror,
                 DEBUG_DEVELOPER
             );
         }
         self::$registration = null;
 
         return [
+            // Status 'ok' describes the LOCAL repair, which did succeed. Whether
+            // Moodiy acknowledged it is `remote_sync_status`, and callers that
+            // need the catalog updated must read that field, not this one.
             'status' => 'ok',
             'message' => $remotesynced
                 ? 'Internal site registration repaired and synced with Moodiy.'
@@ -980,6 +1000,7 @@ class registration {
             'deleted_records' => $deletedrecords,
             'recreated' => $recreated,
             'remote_sync_status' => $remotesynced ? 'ok' : 'pending',
+            'remote_sync_error' => $remotesyncerror,
         ];
     }
 

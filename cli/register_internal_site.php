@@ -72,4 +72,22 @@ if ($encoded === false) {
 }
 
 fwrite(STDOUT, $encoded . PHP_EOL);
-exit(($result['status'] ?? null) === 'ok' ? 0 : 1);
+
+// Exit 0 only when Moodiy actually acknowledged the registration.
+//
+// This CLI exists so provisioning can register the box. A `status` of 'ok' means
+// the box's OWN table was written, which it is even when the call to Moodiy
+// threw — so exiting on `status` alone reported success for a site the catalog
+// had never heard of. That is exactly what happened: the Ansible role printed
+// "self-registration rc=0 (registered)" on every Premium build while Moodiy
+// received nothing, for four days, because a swallowed exception and this exit
+// code agreed with each other.
+//
+// Value 'unchanged' is a success: the local record already matched the requested
+// UUID and site URL, so there was nothing to send.
+// See https://github.com/moodiycloud/moodiy/issues/1107.
+$remotesyncstatus = $result['remote_sync_status'] ?? null;
+$localrepairok = ($result['status'] ?? null) === 'ok';
+$remoteok = $remotesyncstatus === null || in_array($remotesyncstatus, ['ok', 'unchanged'], true);
+
+exit($localrepairok && $remoteok ? 0 : 1);
