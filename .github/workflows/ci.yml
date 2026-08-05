@@ -28,7 +28,16 @@ jobs:
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
 
       mariadb:
-        image: mariadb:10.11
+        # Moodle main (5.4-dev) raised its minimum to MariaDB 11.4.0, so the
+        # `main / php8.4 / mariadb` leg started failing inside Moodle's OWN
+        # PHPUnit installer with "version 11.4.0 is required and you are running
+        # 10.11.18" -- before any plugin code ran. Upstream drift since the last
+        # green main build on 2026-07-18, not a plugin change.
+        #
+        # 11.4 is the LTS line and clears the minimum for every stable branch in
+        # the matrix too (4.5 / 5.0 / 5.1 / 5.2), so one shared service still
+        # covers them all. Moodle enforces a floor, not a ceiling.
+        image: mariadb:11.4
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
