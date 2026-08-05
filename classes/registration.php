@@ -977,7 +977,7 @@ class registration {
             //
             // Carry the message out so the caller can print something
             // actionable instead of a status word.
-            // https://github.com/moodiycloud/moodiy/issues/1107
+            // See https://github.com/moodiycloud/moodiy/issues/1107.
             $remotesyncerror = $e->getMessage();
             debugging(
                 'Local internal site registration was repaired, but the remote Moodiy sync is pending: ' .
@@ -988,9 +988,9 @@ class registration {
         self::$registration = null;
 
         return [
-            // 'ok' describes the LOCAL repair, which did succeed. Whether Moodiy
-            // acknowledged it is `remote_sync_status`, and callers that need the
-            // catalog updated must read that field, not this one.
+            // Status 'ok' describes the LOCAL repair, which did succeed. Whether
+            // Moodiy acknowledged it is `remote_sync_status`, and callers that
+            // need the catalog updated must read that field, not this one.
             'status' => 'ok',
             'message' => $remotesynced
                 ? 'Internal site registration repaired and synced with Moodiy.'
