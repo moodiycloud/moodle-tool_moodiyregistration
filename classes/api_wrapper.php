@@ -40,7 +40,7 @@ class api_wrapper {
     /**
      * Instance proxy for the static api::update_registration call.
      *
-     * @param object $reginfo Existing registration record (carries site_uuid used for HMAC auth).
+     * @param object $reginfo Existing registration record carrying the public site UUID.
      * @param array $data Updated site info payload to send.
      * @return mixed Decoded response from api::update_registration().
      */
@@ -51,7 +51,7 @@ class api_wrapper {
     /**
      * Instance proxy for the static api::unregister_site call.
      *
-     * @param object $reginfo Existing registration record (carries site_uuid used for HMAC auth).
+     * @param object $reginfo Existing registration record carrying the public site UUID.
      * @return mixed Decoded response from api::unregister_site().
      */
     public function unregister_site($reginfo) {
