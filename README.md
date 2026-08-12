@@ -51,6 +51,41 @@ php admin/cli/upgrade.php
 - Complete the registration form and confirm the registration flow with MoodiyCloud.
 - After registration, Moodle will keep the site record updated using scheduled tasks.
 
+### Managed-site request signing
+
+Managed provisioning may pre-seed the dedicated registration signing credential in a protected,
+non-web-served Moodle configuration include:
+
+```php
+$CFG->moodiysiteregistrationuuid = '<core-issued-uuid>';
+$CFG->moodiyregistrationsigningkey = '<core-issued-high-entropy-secret>';
+$CFG->moodiyregistrationsigningkeyversion = 1;
+$CFG->moodiyregistrationattemptid = '<current-external-request-id>';
+$CFG->moodiyregistrationaction = 'server_provision_single';
+```
+
+The plugin signs update and delete requests with that credential. Signatures bind the HTTP method,
+canonical API path, exact JSON body digest, timestamp, nonce, site UUID, and key version. Existing
+installations without a dedicated key retain a bounded legacy bootstrap path so Core can mint the
+first versioned key; newly provisioned managed sites should always be pre-seeded.
+
+The attempt ID and action are an optional all-or-none pair for ordinary updates and are required by
+managed provisioning/recovery. Attempt IDs must match
+`^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$`; actions must be `server_provision_single`,
+`server_provision_webdb_pair`, or `server_site_recover`. Both values are inserted into the exact
+signed JSON update body so Core can bind an acknowledgement to one immutable provisioning attempt.
+
+Do not print, commit, or place the signing key in task arguments. Keep the configuration include
+outside the web/code root with site-owner-only permissions.
+
+The internal-site repair CLI prints only `remote_sync_status`, `remote_acknowledged`,
+`remote_http_status`, `acknowledgement_fingerprint`, `signing_key_version`, and
+`site_uuid_fingerprint` on success. UUID and acknowledgement fingerprints are lowercase SHA-256;
+the raw UUID, acknowledgement token, signing material, response body, site URL, and admin email are
+never included. The raw provisioning attempt ID and action are also omitted. A failed result may
+additionally contain only a stable `error_code` or
+`remote_sync_error_code`.
+
 ## Moodle plugins directory submission
 
 Suggested short description:

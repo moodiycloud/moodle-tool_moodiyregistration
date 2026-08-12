@@ -185,10 +185,7 @@ final class registration_test extends \advanced_testcase {
 
         // Create a mock for the api class.
         $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
-        $apiwrapper->method('update_registration')->willReturn([
-            'success' => true,
-            'message' => 'Site registration updated successfully',
-        ]);
+        $apiwrapper->method('update_registration')->willReturn($this->acknowledged_response('ack-recreate'));
 
         // Set the mock for tests.
         $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
@@ -222,10 +219,7 @@ final class registration_test extends \advanced_testcase {
 
         // Create a mock for the api class.
         $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
-        $apiwrapper->method('update_registration')->willReturn([
-            'success' => true,
-            'message' => 'Site registration updated successfully',
-        ]);
+        $apiwrapper->method('update_registration')->willReturn($this->acknowledged_response('ack-recreate'));
 
         // Set the mock for tests.
         $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
@@ -533,28 +527,33 @@ final class registration_test extends \advanced_testcase {
         $DB->insert_record('tool_moodiyregistration', $oldrecord);
 
         $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
-        $apiwrapper->method('update_registration')->willReturn([
-            'success' => true,
-            'message' => 'Site registration updated successfully',
-        ]);
+        $apiwrapper->method('update_registration')->willReturn($this->acknowledged_response('ack-recreate'));
         $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
 
-        $result = registration::repair_internal_site_registration('new-uuid-654321');
+        $result = registration::repair_internal_site_registration('11111111-1111-4111-8111-111111111111');
 
         $this->assertSame('ok', $result['status']);
-        $this->assertSame('new-uuid-654321', $result['site_uuid']);
+        $this->assertSame('11111111-1111-4111-8111-111111111111', $result['site_uuid']);
         // A single stale row is reused in place, so repair does not report an extra deletion here.
         $this->assertSame(0, $result['deleted_records']);
         $this->assertTrue($result['recreated']);
         $this->assertSame('ok', $result['remote_sync_status']);
+        $this->assertTrue($result['remote_acknowledged']);
+        $this->assertSame(200, $result['remote_http_status']);
+        $this->assertSame(hash('sha256', 'ack-recreate'), $result['acknowledgement_fingerprint']);
+        $this->assertSame(1, $result['signing_key_version']);
+        $this->assertSame(
+            hash('sha256', '11111111-1111-4111-8111-111111111111'),
+            $result['site_uuid_fingerprint']
+        );
         // No error to report when the sync landed.
-        $this->assertNull($result['remote_sync_error']);
+        $this->assertNull($result['remote_sync_error_code']);
 
         $records = $DB->get_records('tool_moodiyregistration');
         $this->assertCount(1, $records);
 
         $record = reset($records);
-        $this->assertSame('new-uuid-654321', $record->site_uuid);
+        $this->assertSame('11111111-1111-4111-8111-111111111111', $record->site_uuid);
         $this->assertSame($CFG->wwwroot, $record->site_url);
     }
 
@@ -569,20 +568,32 @@ final class registration_test extends \advanced_testcase {
 
         $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
         $apiwrapper->method('update_registration')->will(
-            $this->throwException(new \moodle_exception('Remote API unavailable'))
+            $this->throwException(new \moodle_exception(
+                'errorconnect',
+                'tool_moodiyregistration',
+                '',
+                'raw-secret raw-response private-admin@example.com 123e4567-e89b-42d3-a456-426614174000'
+            ))
         );
         $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
 
-        $result = registration::repair_internal_site_registration('pending-uuid-123456');
+        $result = registration::repair_internal_site_registration('22222222-2222-4222-8222-222222222222');
 
         // The repair helper logs a developer-mode debugging() message when the remote
         // sync is deferred so dev/staging cron output surfaces the situation. The test
         // must assert that here, otherwise Moodle's PHPUnit harness fails the test
         // with "Unexpected debugging() call detected".
-        $this->assertDebuggingCalled();
+        $this->assertDebuggingCalled(
+            'Local internal site registration was repaired, but remote sync is pending. Error code: '
+                . 'transport_error',
+            DEBUG_DEVELOPER
+        );
 
         $this->assertSame('ok', $result['status']);
         $this->assertSame('pending', $result['remote_sync_status']);
+        $this->assertFalse($result['remote_acknowledged']);
+        $this->assertNull($result['remote_http_status']);
+        $this->assertNull($result['acknowledgement_fingerprint']);
         $this->assertTrue($result['recreated']);
 
         // The reason must LEAVE this function. It used to exist only inside a
@@ -590,12 +601,130 @@ final class registration_test extends \advanced_testcase {
         // (DEBUG_DEVELOPER off), so the caller had a status word and no way to
         // say why Moodiy was not reached.
         // See https://github.com/moodiycloud/moodiy/issues/1107.
-        $this->assertArrayHasKey('remote_sync_error', $result);
-        $this->assertStringContainsString('Remote API unavailable', (string) $result['remote_sync_error']);
+        $this->assertSame('transport_error', $result['remote_sync_error_code']);
 
-        $record = $DB->get_record('tool_moodiyregistration', ['site_uuid' => 'pending-uuid-123456']);
+        $record = $DB->get_record('tool_moodiyregistration', [
+            'site_uuid' => '22222222-2222-4222-8222-222222222222',
+        ]);
         $this->assertNotFalse($record);
-        $this->assertSame('pending-uuid-123456', $record->site_uuid);
+        $this->assertSame('22222222-2222-4222-8222-222222222222', $record->site_uuid);
+    }
+
+    /**
+     * Test an exact local match retries Core after the previous remote call failed.
+     * @covers ::repair_internal_site_registration
+     */
+    public function test_matching_local_registration_retries_pending_remote_sync_until_acknowledged(): void {
+        global $DB, $CFG;
+
+        $this->mark_as_internal_site();
+        $calls = 0;
+        $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
+        $apiwrapper->expects($this->exactly(3))
+            ->method('update_registration')
+            ->willReturnCallback(function () use (&$calls): array {
+                $calls++;
+                if ($calls <= 2) {
+                    throw new \moodle_exception('Remote API unavailable');
+                }
+
+                return $this->acknowledged_response('ack-retry');
+            });
+        $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+
+        $first = registration::repair_internal_site_registration('33333333-3333-4333-8333-333333333333');
+        $this->assertDebuggingCalled(
+            'Local internal site registration was repaired, but remote sync is pending. Error code: '
+                . 'remote_registration_failed',
+            DEBUG_DEVELOPER
+        );
+        $recordid = (int)$DB->get_field('tool_moodiyregistration', 'id', [
+            'site_uuid' => '33333333-3333-4333-8333-333333333333',
+        ]);
+
+        $second = registration::repair_internal_site_registration('33333333-3333-4333-8333-333333333333');
+        $this->assertDebuggingCalled(
+            'Local internal site registration was repaired, but remote sync is pending. Error code: '
+                . 'remote_registration_failed',
+            DEBUG_DEVELOPER
+        );
+        $third = registration::repair_internal_site_registration('33333333-3333-4333-8333-333333333333');
+
+        $this->assertSame('pending', $first['remote_sync_status']);
+        $this->assertSame('pending', $second['remote_sync_status']);
+        $this->assertSame('ok', $third['remote_sync_status']);
+        $this->assertSame(1, cli_registration_result::exit_code($first));
+        $this->assertSame(1, cli_registration_result::exit_code($second));
+        $this->assertSame(0, cli_registration_result::exit_code($third));
+        $this->assertFalse($second['recreated']);
+        $this->assertFalse($third['recreated']);
+        $this->assertSame(hash('sha256', 'ack-retry'), $third['acknowledgement_fingerprint']);
+        $this->assertSame($recordid, (int)$DB->get_field('tool_moodiyregistration', 'id', [
+            'site_uuid' => '33333333-3333-4333-8333-333333333333',
+        ]));
+        $this->assertSame(1, $DB->count_records('tool_moodiyregistration'));
+    }
+
+    /**
+     * Test a nominal success without Core acknowledgement remains pending.
+     * @covers ::repair_internal_site_registration
+     */
+    public function test_remote_success_without_acknowledgement_remains_pending(): void {
+        global $CFG;
+
+        $this->mark_as_internal_site();
+        $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
+        $apiwrapper->expects($this->once())
+            ->method('update_registration')
+            ->willReturn(['success' => true]);
+        $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+
+        $result = registration::repair_internal_site_registration('44444444-4444-4444-8444-444444444444');
+
+        $this->assertDebuggingCalled(
+            'Local internal site registration was repaired, but remote sync is pending. Error code: '
+                . 'missing_acknowledgement',
+            DEBUG_DEVELOPER
+        );
+        $this->assertSame('ok', $result['status']);
+        $this->assertSame('pending', $result['remote_sync_status']);
+        $this->assertFalse($result['remote_acknowledged']);
+        $this->assertSame('missing_acknowledgement', $result['remote_sync_error_code']);
+    }
+
+    /**
+     * Test an invalid protected attempt binding stays pending without logging or printing its value.
+     * @covers ::repair_internal_site_registration
+     * @covers ::classify_remote_sync_error
+     */
+    public function test_invalid_attempt_binding_is_pending_and_redacted(): void {
+        global $CFG, $DB;
+
+        $this->mark_as_internal_site();
+        $attemptsentinel = 'invalid attempt private-admin@example.com';
+        $siteuuid = '99999999-9999-4999-8999-999999999999';
+        $CFG->{api::REGISTRATION_ATTEMPT_ID_CONFIG} = $attemptsentinel;
+        $CFG->{api::REGISTRATION_ACTION_CONFIG} = 'server_provision_single';
+
+        $result = registration::repair_internal_site_registration($siteuuid);
+
+        $this->assertDebuggingCalled(
+            'Local internal site registration was repaired, but remote sync is pending. Error code: '
+                . 'invalid_attempt_binding',
+            DEBUG_DEVELOPER
+        );
+        $this->assertSame('pending', $result['remote_sync_status']);
+        $this->assertSame('invalid_attempt_binding', $result['remote_sync_error_code']);
+        $this->assertSame(1, cli_registration_result::exit_code($result));
+        $this->assertSame(1, $DB->count_records('tool_moodiyregistration'));
+
+        $encoded = cli_registration_result::encode($result + [
+            'registration_attempt_id' => $attemptsentinel,
+            'registration_action' => 'server_provision_single',
+        ]);
+        $this->assertStringNotContainsString($attemptsentinel, $encoded);
+        $this->assertStringNotContainsString($siteuuid, $encoded);
+        $this->assertStringNotContainsString('server_provision_single', $encoded);
     }
 
     /**
@@ -620,13 +749,10 @@ final class registration_test extends \advanced_testcase {
         registration::save_site_info($data);
 
         $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
-        $apiwrapper->method('update_registration')->willReturn([
-            'success' => true,
-            'message' => 'Site registration updated successfully',
-        ]);
+        $apiwrapper->method('update_registration')->willReturn($this->acknowledged_response('ack-preserve'));
         $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
 
-        registration::repair_internal_site_registration('preserve-uuid-123456');
+        registration::repair_internal_site_registration('55555555-5555-4555-8555-555555555555');
 
         $this->assertSame('Custom Site Name', get_config('tool_moodiyregistration', 'site_site_name'));
         $this->assertSame('Custom site description', get_config('tool_moodiyregistration', 'site_description'));
@@ -649,7 +775,7 @@ final class registration_test extends \advanced_testcase {
         ];
         $DB->insert_record('tool_moodiyregistration', $existing);
 
-        $result = registration::repair_internal_site_registration('new-uuid-654321');
+        $result = registration::repair_internal_site_registration('66666666-6666-4666-8666-666666666666');
 
         $this->assertSame('error', $result['status']);
         $this->assertSame(
@@ -660,6 +786,26 @@ final class registration_test extends \advanced_testcase {
         $record = $DB->get_record('tool_moodiyregistration', []);
         $this->assertNotFalse($record);
         $this->assertSame('existing-uuid-123456', $record->site_uuid);
+    }
+
+    /**
+     * Test internal repair rejects a non-canonical UUID before local or remote work.
+     * @covers ::repair_internal_site_registration
+     * @covers ::is_canonical_site_uuid
+     */
+    public function test_repair_internal_site_registration_rejects_invalid_uuid(): void {
+        global $DB, $CFG;
+
+        $this->mark_as_internal_site();
+        $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
+        $apiwrapper->expects($this->never())->method('update_registration');
+        $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+
+        $result = registration::repair_internal_site_registration('not-a-site-uuid');
+
+        $this->assertSame('error', $result['status']);
+        $this->assertSame('invalid_site_uuid', $result['error_code']);
+        $this->assertSame(0, $DB->count_records('tool_moodiyregistration'));
     }
 
     /**
@@ -711,6 +857,24 @@ final class registration_test extends \advanced_testcase {
         global $CFG;
 
         $CFG->forced_plugin_settings = ['auth_maintenance' => []];
+    }
+
+    /**
+     * Build the sanitized acknowledgement shape returned by the production API wrapper.
+     *
+     * @param string $acknowledgementid Opaque acknowledgement identifier.
+     * @return array
+     */
+    private function acknowledged_response(string $acknowledgementid): array {
+        return [
+            'success' => true,
+            'data' => [
+            ],
+            '_moodiy_http_status' => 200,
+            '_moodiy_acknowledgement_fingerprint' => hash('sha256', $acknowledgementid),
+            '_moodiy_acknowledged' => true,
+            '_moodiy_signing_key_version' => 1,
+        ];
     }
 
     /**

@@ -38,56 +38,37 @@ require_once($CFG->libdir . '/clilib.php');
 );
 
 if (($options['help'] ?? false) || !empty($unrecognized)) {
-    fwrite(STDOUT, json_encode([
-        'status' => 'error',
-        'message' => 'Usage: php admin/tool/moodiyregistration/cli/register_internal_site.php --site-uuid=<uuid>',
+    fwrite(STDOUT, \tool_moodiyregistration\cli_registration_result::encode([
+        'remote_sync_status' => 'failed',
+        'error_code' => 'invalid_cli_arguments',
     ]) . PHP_EOL);
     exit(1);
 }
 
 $siteuuid = trim((string) ($options['site-uuid'] ?? ''));
 if ($siteuuid === '') {
-    fwrite(STDOUT, json_encode([
-        'status' => 'error',
-        'message' => 'Missing required --site-uuid option.',
+    fwrite(STDOUT, \tool_moodiyregistration\cli_registration_result::encode([
+        'remote_sync_status' => 'failed',
+        'error_code' => 'missing_site_uuid',
     ]) . PHP_EOL);
     exit(1);
 }
 
 try {
     $result = \tool_moodiyregistration\registration::repair_internal_site_registration($siteuuid);
-} catch (\Throwable $exception) {
+} catch (\Throwable) {
     $result = [
         'status' => 'error',
-        'message' => $exception->getMessage(),
+        'error_code' => 'unexpected_registration_error',
+        'message' => 'Internal site registration could not be completed.',
     ];
 }
 
-$encoded = json_encode($result);
-if ($encoded === false) {
-    $encoded = json_encode([
-        'status' => 'error',
-        'message' => 'Failed to encode repair result as JSON.',
-    ]);
-}
+$exitcode = \tool_moodiyregistration\cli_registration_result::exit_code($result);
+$encoded = \tool_moodiyregistration\cli_registration_result::encode($result);
 
 fwrite(STDOUT, $encoded . PHP_EOL);
 
-// Exit 0 only when Moodiy actually acknowledged the registration.
-//
-// This CLI exists so provisioning can register the box. A `status` of 'ok' means
-// the box's OWN table was written, which it is even when the call to Moodiy
-// threw — so exiting on `status` alone reported success for a site the catalog
-// had never heard of. That is exactly what happened: the Ansible role printed
-// "self-registration rc=0 (registered)" on every Premium build while Moodiy
-// received nothing, for four days, because a swallowed exception and this exit
-// code agreed with each other.
-//
-// Value 'unchanged' is a success: the local record already matched the requested
-// UUID and site URL, so there was nothing to send.
-// See https://github.com/moodiycloud/moodiy/issues/1107.
-$remotesyncstatus = $result['remote_sync_status'] ?? null;
-$localrepairok = ($result['status'] ?? null) === 'ok';
-$remoteok = $remotesyncstatus === null || in_array($remotesyncstatus, ['ok', 'unchanged'], true);
-
-exit($localrepairok && $remoteok ? 0 : 1);
+// Local-row repair is not provisioning success. Exit zero only when Core returned
+// a 2xx acknowledgement with a non-empty identifier for this exact update.
+exit($exitcode);

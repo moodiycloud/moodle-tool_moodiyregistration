@@ -565,6 +565,7 @@ class registration {
             $api = self::get_api_wrapper();
             $api->unregister_site($registration);
             $DB->delete_records('tool_moodiyregistration', ['site_uuid' => $registration->site_uuid]);
+            api::forget_signing_credential((string)$registration->site_uuid);
             // Trigger a site unregistration event.
             $event = \tool_moodiyregistration\event\moodiy_unregistration::create([
                 'context' => context_system::instance(),
@@ -774,8 +775,8 @@ class registration {
                     ]);
                     $event->add_record_snapshot('tool_moodiyregistration', $registration);
                     $event->trigger();
-                } catch (moodle_exception $e) {
-                    mtrace($e->getMessage());
+                } catch (moodle_exception) {
+                    mtrace('Moodiy registration URL update failed.');
                     return false;
                 }
             }
@@ -840,7 +841,7 @@ class registration {
                 debugging('Site unregistered from Moodiy side, local registration record deleted.');
                 return;
             }
-            debugging('Error updating registration: ' . $e->getMessage());
+            debugging('Moodiy registration update failed.');
             return;
         }
     }
@@ -873,16 +874,16 @@ class registration {
                     $api = self::get_api_wrapper();
                     $api->update_registration($record, $siteinfo);
                     self::remember_automatic_update_payload_hash($siteinfo);
-                } catch (moodle_exception $e) {
-                    debugging('Error updating internal site: ' . $e->getMessage());
+                } catch (moodle_exception) {
+                    debugging('Moodiy internal-site registration update failed.');
                     // If update fails, keep the inserted record, moodiy will take care.
                     return false;
                 }
                 return true;
             }
             return false;
-        } catch (\dml_write_exception $e) {
-            debugging('Error inserting internal site registration record: ' . $e->getMessage());
+        } catch (\dml_write_exception) {
+            debugging('Moodiy internal-site registration record insert failed.');
             return false;
         }
     }
@@ -901,11 +902,12 @@ class registration {
     public static function repair_internal_site_registration(string $uuid): array {
         global $CFG, $DB;
 
-        $uuid = trim($uuid);
-        if ($uuid === '') {
+        $uuid = strtolower(trim($uuid));
+        if (!self::is_canonical_site_uuid($uuid)) {
             return [
                 'status' => 'error',
-                'message' => 'Site UUID is required.',
+                'error_code' => 'invalid_site_uuid',
+                'message' => 'A canonical site UUID is required.',
             ];
         }
 
@@ -916,32 +918,16 @@ class registration {
             ];
         }
 
-        $existingcount = (int) $DB->count_records('tool_moodiyregistration');
-        $existingrecord = $existingcount === 1 ? $DB->get_record('tool_moodiyregistration', []) : false;
-
-        if ($existingrecord && $existingrecord->site_uuid === $uuid && ($existingrecord->site_url ?? '') === $CFG->wwwroot) {
-            self::$registration = null;
-
-            return [
-                'status' => 'ok',
-                'message' => 'Internal site registration already matches the requested UUID.',
-                'site_uuid' => $uuid,
-                'site_url' => $existingrecord->site_url,
-                'deleted_records' => 0,
-                'recreated' => false,
-                'remote_sync_status' => 'unchanged',
-            ];
-        }
-
         try {
             $transaction = $DB->start_delegated_transaction();
             [$record, $deletedrecords, $recreated] = self::upsert_internal_site_registration_record($uuid);
             $transaction->allow_commit();
-        } catch (\dml_exception $e) {
-            debugging('Error repairing internal site registration record: ' . $e->getMessage());
+        } catch (\dml_exception) {
+            debugging('Moodiy internal-site registration local repair failed. Error code: local_database_error.');
 
             return [
                 'status' => 'error',
+                'error_code' => 'local_database_error',
                 'message' => 'Failed to recreate the local internal site registration record.',
                 'site_uuid' => $uuid,
                 'deleted_records' => 0,
@@ -956,32 +942,41 @@ class registration {
         $siteinfo = self::get_siteinfo();
         $siteinfo['site_uuid'] = $uuid;
         $remotesynced = false;
-        $remotesyncerror = null;
+        $remotesyncerrorcode = null;
+        $remoteacknowledged = false;
+        $remotehttpstatus = null;
+        $acknowledgementfingerprint = null;
+        $signingkeyversion = null;
         try {
             $api = self::get_api_wrapper();
-            $api->update_registration($record, $siteinfo);
+            $response = $api->update_registration($record, $siteinfo);
+            $acknowledgement = self::extract_remote_acknowledgement($response);
+            if ($acknowledgement === null) {
+                throw new moodle_exception(
+                    'errorregistrationupdate',
+                    'tool_moodiyregistration',
+                    '',
+                    'Moodiy did not return a valid registration acknowledgement.'
+                );
+            }
             self::remember_automatic_update_payload_hash($siteinfo);
             $remotesynced = true;
-        } catch (moodle_exception $e) {
+            $remoteacknowledged = true;
+            $remotehttpstatus = $acknowledgement['http_status'];
+            $acknowledgementfingerprint = $acknowledgement['acknowledgement_fingerprint'];
+            $signingkeyversion = $acknowledgement['signing_key_version'];
+        } catch (\Throwable $e) {
             // The catch stays: a failed remote sync must NOT roll back the local
             // repair, which is valid on its own and is what the next scheduled
             // run retries from.
             //
-            // What changed is that the reason no longer dies here. This used to
-            // be a bare debugging() call, which nothing reads: on a provisioned
-            // box DEBUG_DEVELOPER is off, so the only trace of "Moodiy never
-            // heard about this site" was a `remote_sync_status` field that no
-            // caller inspected. The Ansible role printed rc=0 (registered) and
-            // the whole estate went four days without a single Premium site
-            // registering.
-            //
-            // Carry the message out so the caller can print something
-            // actionable instead of a status word.
+            // Only the stable category leaves this helper. Raw exception text is
+            // intentionally omitted from both developer debugging and automation output.
             // See https://github.com/moodiycloud/moodiy/issues/1107.
-            $remotesyncerror = $e->getMessage();
+            $remotesyncerrorcode = self::classify_remote_sync_error($e);
             debugging(
-                'Local internal site registration was repaired, but the remote Moodiy sync is pending: ' .
-                $remotesyncerror,
+                'Local internal site registration was repaired, but remote sync is pending. Error code: ' .
+                $remotesyncerrorcode,
                 DEBUG_DEVELOPER
             );
         }
@@ -1000,8 +995,90 @@ class registration {
             'deleted_records' => $deletedrecords,
             'recreated' => $recreated,
             'remote_sync_status' => $remotesynced ? 'ok' : 'pending',
-            'remote_sync_error' => $remotesyncerror,
+            'remote_sync_error_code' => $remotesyncerrorcode,
+            'remote_acknowledged' => $remoteacknowledged,
+            'remote_http_status' => $remotehttpstatus,
+            'acknowledgement_fingerprint' => $acknowledgementfingerprint,
+            'signing_key_version' => $signingkeyversion,
+            'site_uuid_fingerprint' => hash('sha256', $uuid),
         ];
+    }
+
+    /**
+     * Extract the non-secret proof that Core accepted a registration update.
+     *
+     * The production API wrapper adds underscore-prefixed transport metadata after validating
+     * and sanitizing Core's response. Tests may return the public Core response shape directly.
+     *
+     * @param mixed $response API wrapper response.
+     * @return array{acknowledgement_fingerprint:string,http_status:int,signing_key_version:int}|null
+     */
+    private static function extract_remote_acknowledgement($response): ?array {
+        if (!is_array($response)) {
+            return null;
+        }
+
+        $acknowledged = $response['_moodiy_acknowledged'] ?? false;
+        $acknowledgementfingerprint = strtolower(trim((string)(
+            $response['_moodiy_acknowledgement_fingerprint'] ?? ''
+        )));
+        $httpstatus = $response['_moodiy_http_status'] ?? $response['remote_http_status'] ?? null;
+        $signingkeyversion = $response['_moodiy_signing_key_version']
+            ?? null;
+
+        if (
+            $acknowledged !== true
+            || preg_match('/^[a-f0-9]{64}$/', $acknowledgementfingerprint) !== 1
+            || !is_numeric($httpstatus)
+            || !is_numeric($signingkeyversion)
+            || (int)$signingkeyversion <= 0
+        ) {
+            return null;
+        }
+        $httpstatus = (int)$httpstatus;
+        if ($httpstatus < 200 || $httpstatus >= 300) {
+            return null;
+        }
+
+        return [
+            'acknowledgement_fingerprint' => $acknowledgementfingerprint,
+            'http_status' => $httpstatus,
+            'signing_key_version' => (int)$signingkeyversion,
+        ];
+    }
+
+    /**
+     * Classify a remote failure without returning raw response or exception text to automation.
+     *
+     * @param \Throwable $exception Remote update failure.
+     * @return string Stable error category.
+     */
+    private static function classify_remote_sync_error(\Throwable $exception): string {
+        $message = strtolower($exception->getMessage());
+        if (str_contains($message, 'registration acknowledgement')) {
+            return 'missing_acknowledgement';
+        }
+        if (str_contains($message, 'protected registration attempt binding')) {
+            return 'invalid_attempt_binding';
+        }
+        if ($exception instanceof moodle_exception && $exception->errorcode === 'errorconnect') {
+            return 'transport_error';
+        }
+
+        return 'remote_registration_failed';
+    }
+
+    /**
+     * Determine whether a UUID is in canonical lowercase RFC 4122 form.
+     *
+     * @param string $uuid Candidate UUID.
+     * @return bool
+     */
+    private static function is_canonical_site_uuid(string $uuid): bool {
+        return preg_match(
+            '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/',
+            $uuid
+        ) === 1;
     }
 
     /**
@@ -1251,6 +1328,7 @@ class registration {
         unset_config(self::LAST_SUCCESSFUL_UPDATE_HASH, 'tool_moodiyregistration');
 
         $DB->delete_records('tool_moodiyregistration', ['site_uuid' => $registration->site_uuid]);
+        api::forget_signing_credential((string)$registration->site_uuid);
         self::$registration = null;
     }
 

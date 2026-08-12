@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-- No unreleased changes.
+- retry Core registration when the internal-site local UUID and URL already match
+- require an authoritative 2xx acknowledgement before provisioning reports registration success
+- replace UUID-based signing with pre-seeded versioned keys and a legacy bootstrap only for existing migrations
+- bind update/delete signatures to method, path, raw body digest, timestamp, nonce, UUID, and key version
+- bind managed-site acknowledgement proofs to the validated provisioning attempt ID and action
+- emit only stable failure categories and an acknowledgement fingerprint in sanitized CLI output
 
 ## 0.2.0 - 2026-06-07
 
