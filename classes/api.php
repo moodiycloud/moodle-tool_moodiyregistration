@@ -190,12 +190,10 @@ class api {
         } else if ($response === false) {
             throw new coding_exception('Error calling API: ' . $curl->getError());
         } else if (!self::is_success_http_status((int)$info['http_code']) || empty($response['success'])) {
-            if (isset($response['errors']) && is_array($response['errors'])) {
-                foreach ($response['errors'] as $error) {
-                    if (stripos($error, self::ERROR_REGISTRATION_NONEXISTENT) !== false) {
-                        // Throw exception to remove registration from moodle.
-                        throw new moodle_exception('errorregistrationupdate', 'tool_moodiyregistration', '', $error);
-                    }
+            foreach (self::flatten_error_messages($response) as $error) {
+                if (stripos($error, self::ERROR_REGISTRATION_NONEXISTENT) !== false) {
+                    // Throw exception to remove registration from moodle.
+                    throw new moodle_exception('errorregistrationupdate', 'tool_moodiyregistration', '', $error);
                 }
             }
             $message = $response['message'] ?? 'Error during registration update';
@@ -259,12 +257,10 @@ class api {
         } else if ($response === false) {
             throw new coding_exception('Error calling API: ' . $curl->getError());
         } else if (!self::is_success_http_status((int)$info['http_code']) || empty($response['success'])) {
-            if (isset($response['errors']) && is_array($response['errors'])) {
-                foreach ($response['errors'] as $error) {
-                    if (stripos($error, self::ERROR_REGISTRATION_NONEXISTENT) !== false) {
-                        // Throw exception to remove registration from moodle.
-                        throw new moodle_exception('errorunregister', 'tool_moodiyregistration', '', $error);
-                    }
+            foreach (self::flatten_error_messages($response) as $error) {
+                if (stripos($error, self::ERROR_REGISTRATION_NONEXISTENT) !== false) {
+                    // Throw exception to remove registration from moodle.
+                    throw new moodle_exception('errorunregister', 'tool_moodiyregistration', '', $error);
                 }
             }
             $message = $response['message'] ?? 'Error during un-registration';
@@ -624,6 +620,33 @@ class api {
         set_config(self::SIGNING_KEY_VERSION_CONFIG, $keyversion, 'tool_moodiyregistration');
         set_config(self::SIGNING_SITE_UUID_CONFIG, $siteuuid, 'tool_moodiyregistration');
         $transaction->allow_commit();
+    }
+
+    /**
+     * Flatten a Laravel-style validation error bag into a list of message strings.
+     *
+     * Core answers a 422 with `errors` shaped as `{field: [message, ...]}`, so each
+     * entry is an ARRAY, not a string. Passing one straight to stripos() raises a
+     * TypeError that escapes the `catch (moodle_exception)` blocks around every
+     * caller, which turned a perfectly descriptive validation failure into an
+     * opaque `remote_registration_failed` with `remote_http_status: null`.
+     *
+     * @param array $response Decoded Core response.
+     * @return string[] Flat list of message strings.
+     */
+    private static function flatten_error_messages(array $response): array {
+        if (!isset($response['errors']) || !is_array($response['errors'])) {
+            return [];
+        }
+
+        $messages = [];
+        array_walk_recursive($response['errors'], static function ($message) use (&$messages): void {
+            if (is_string($message)) {
+                $messages[] = $message;
+            }
+        });
+
+        return $messages;
     }
 
     /**

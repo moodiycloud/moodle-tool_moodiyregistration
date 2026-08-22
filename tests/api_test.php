@@ -41,6 +41,48 @@ final class api_test extends \advanced_testcase {
     }
 
     /**
+     * Core answers a 422 with `errors` shaped {field: [message, ...]}, so each entry
+     * is an ARRAY. Passing one to stripos() raised a TypeError that escaped every
+     * `catch (moodle_exception)` around the callers, turning a descriptive
+     * validation failure into an opaque remote_registration_failed.
+     * @covers ::flatten_error_messages
+     */
+    public function test_nested_validation_error_bag_is_flattened_to_strings(): void {
+        $method = new \ReflectionMethod(api::class, 'flatten_error_messages');
+        $method->setAccessible(true);
+
+        $messages = $method->invoke(null, [
+            'success' => false,
+            'message' => 'The description field is too large. (and 1 more error)',
+            'errors' => [
+                'description' => [
+                    'The description field is too large.',
+                    'The description field may not contain embedded data URI images.',
+                ],
+            ],
+        ]);
+
+        $this->assertSame([
+            'The description field is too large.',
+            'The description field may not contain embedded data URI images.',
+        ], $messages);
+    }
+
+    /**
+     * A response with no error bag, or a non-array one, must yield an empty list
+     * rather than raising.
+     * @covers ::flatten_error_messages
+     */
+    public function test_absent_or_malformed_error_bag_yields_no_messages(): void {
+        $method = new \ReflectionMethod(api::class, 'flatten_error_messages');
+        $method->setAccessible(true);
+
+        $this->assertSame([], $method->invoke(null, ['success' => false]));
+        $this->assertSame([], $method->invoke(null, ['errors' => 'not-an-array']));
+        $this->assertSame(['flat'], $method->invoke(null, ['errors' => ['field' => 'flat']]));
+    }
+
+    /**
      * Test canonical JSON is stable while list order remains meaningful.
      * @covers ::encode_canonical_payload
      */
