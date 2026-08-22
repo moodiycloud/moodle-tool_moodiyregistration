@@ -770,8 +770,8 @@ class registration {
         }
 
         if (strlen($clean) > self::DESCRIPTION_MAX_BYTES) {
-            // mb_strcut respects character boundaries; a raw substr can split a
-            // multibyte sequence and make the payload fail to JSON-encode at all.
+            // Character-boundary safe: a raw substr can split a multibyte sequence
+            // and make the payload fail to JSON-encode at all.
             $clean = mb_strcut($clean, 0, self::DESCRIPTION_MAX_BYTES, 'UTF-8');
         }
 

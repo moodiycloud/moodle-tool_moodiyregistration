@@ -59,13 +59,9 @@ final class registration_test extends \advanced_testcase {
 
 
     /**
-     * Test site registration functionality.
-     * @covers ::register
-     */
-    /**
      * A pasted screenshot in the Moodle site summary must not cost the site its
      * registration. Core rejects a description over 60,000 bytes or containing an
-     * embedded data: URI image, and that refusal is fatal — observed on production
+     * embedded data: URI image, and that refusal is fatal, observed on production
      * at 727 KB, 287 KB and 185 KB, each dominated by one base64 PNG.
      * @covers ::sanitize_description
      */
@@ -73,8 +69,8 @@ final class registration_test extends \advanced_testcase {
         $method = new \ReflectionMethod(registration::class, 'sanitize_description');
         $method->setAccessible(true);
 
-        $description = '<p><img src="data:image/png;base64,'.str_repeat('A', 200000).'" alt="logo"></p>'
-            .'<p>Real prose that must survive.</p>';
+        $description = '<p><img src="data:image/png;base64,' . str_repeat('A', 200000) . '" alt="logo"></p>'
+            . '<p>Real prose that must survive.</p>';
 
         $clean = $method->invoke(null, $description);
 
@@ -92,7 +88,7 @@ final class registration_test extends \advanced_testcase {
         $method = new \ReflectionMethod(registration::class, 'sanitize_description');
         $method->setAccessible(true);
 
-        // 'é' is two bytes, so an odd byte cap lands mid-character without mb_strcut.
+        // Two-byte characters: an odd byte cap lands mid-character without mb_strcut.
         $clean = $method->invoke(null, str_repeat('é', registration::DESCRIPTION_MAX_BYTES));
 
         $this->assertLessThanOrEqual(registration::DESCRIPTION_MAX_BYTES, strlen($clean));
@@ -109,7 +105,7 @@ final class registration_test extends \advanced_testcase {
         $method = new \ReflectionMethod(registration::class, 'sanitize_description');
         $method->setAccessible(true);
 
-        // No closing bracket, so the strip pattern cannot match it.
+        // No closing bracket, so the strip pattern cannot match the tag.
         $this->assertSame('', $method->invoke(null, '<img alt="x" src="data:image/png;base64,AAAA'));
     }
 
@@ -128,6 +124,10 @@ final class registration_test extends \advanced_testcase {
         $this->assertSame('', $method->invoke(null, ''));
     }
 
+    /**
+     * Test site registration functionality.
+     * @covers ::register
+     */
     public function test_site_registration(): void {
         global $DB, $CFG;
 

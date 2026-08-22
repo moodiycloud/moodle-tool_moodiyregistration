@@ -623,12 +623,6 @@ class api {
     }
 
     /**
-     * Recursively sort associative payload maps while retaining list order.
-     *
-     * @param array $payload Payload branch.
-     * @return array Sorted payload.
-     */
-    /**
      * Flatten a Laravel-style validation error bag into a list of message strings.
      *
      * Core answers a 422 with `errors` shaped as `{field: [message, ...]}`, so each
@@ -655,6 +649,12 @@ class api {
         return $messages;
     }
 
+    /**
+     * Recursively sort associative payload maps while retaining list order.
+     *
+     * @param array $payload Payload branch.
+     * @return array Sorted payload.
+     */
     private static function sort_payload_recursively(array $payload): array {
         foreach ($payload as $key => $value) {
             if (is_array($value)) {
