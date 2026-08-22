@@ -47,6 +47,9 @@ class registration {
     /** @var string Moodiy API URL */
     const MOODIYURL = 'https://moodiycloud.com';
 
+    /** @var int Largest description Core will accept, in bytes. Mirrors SiteRegistrationUpdateRequest. */
+    const DESCRIPTION_MAX_BYTES = 60000;
+
     /** @var stdClass cached site registration information */
     protected static $registration = null;
 
@@ -729,11 +732,54 @@ class registration {
         $siteinfo = self::get_saved_form_data();
         $siteinfo['site_url'] = $CFG->wwwroot;
         $siteinfo['timestamp'] = time();
+        if (array_key_exists('description', $siteinfo)) {
+            $siteinfo['description'] = self::sanitize_description($siteinfo['description']);
+        }
 
         // Statistical data.
         $metadata  = self::get_site_metadata();
         $siteinfo['site_metadata'] = json_encode($metadata);
         return $siteinfo;
+    }
+
+    /**
+     * Reduce the site summary to something Core will accept.
+     *
+     * The description we send is the Moodle site summary, which is customer-authored
+     * rich text. Core refuses a description over DESCRIPTION_MAX_BYTES or containing
+     * an embedded `data:` URI image, and that refusal is fatal to registration: a
+     * site whose summary holds a pasted screenshot can never obtain its signing
+     * credential. Observed on production 2026-08-22 at 727 KB, 287 KB and 185 KB,
+     * each dominated by a single base64 PNG.
+     *
+     * Registration is worth more than verbatim marketing copy, so trim rather than
+     * fail. The final guard drops the description entirely if it still matches the
+     * pattern Core rejects — losing optional metadata beats never registering.
+     *
+     * @param mixed $description Raw site summary.
+     * @return mixed Sanitized summary, or the original value when not a string.
+     */
+    private static function sanitize_description($description) {
+        if (!is_string($description) || $description === '') {
+            return $description;
+        }
+
+        $clean = preg_replace('/<img[^>]+src\s*=\s*[\'"]?\s*data:[^>]*>/i', '', $description);
+        if (!is_string($clean)) {
+            $clean = $description;
+        }
+
+        if (strlen($clean) > self::DESCRIPTION_MAX_BYTES) {
+            // mb_strcut respects character boundaries; a raw substr can split a
+            // multibyte sequence and make the payload fail to JSON-encode at all.
+            $clean = mb_strcut($clean, 0, self::DESCRIPTION_MAX_BYTES, 'UTF-8');
+        }
+
+        if (preg_match('/<img[^>]+src\s*=\s*[\'"]?\s*data:/i', $clean) === 1) {
+            return '';
+        }
+
+        return $clean;
     }
 
     /**

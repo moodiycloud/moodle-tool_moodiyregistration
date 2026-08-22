@@ -62,6 +62,72 @@ final class registration_test extends \advanced_testcase {
      * Test site registration functionality.
      * @covers ::register
      */
+    /**
+     * A pasted screenshot in the Moodle site summary must not cost the site its
+     * registration. Core rejects a description over 60,000 bytes or containing an
+     * embedded data: URI image, and that refusal is fatal — observed on production
+     * at 727 KB, 287 KB and 185 KB, each dominated by one base64 PNG.
+     * @covers ::sanitize_description
+     */
+    public function test_description_with_embedded_data_uri_image_is_stripped(): void {
+        $method = new \ReflectionMethod(registration::class, 'sanitize_description');
+        $method->setAccessible(true);
+
+        $description = '<p><img src="data:image/png;base64,'.str_repeat('A', 200000).'" alt="logo"></p>'
+            .'<p>Real prose that must survive.</p>';
+
+        $clean = $method->invoke(null, $description);
+
+        $this->assertStringContainsString('Real prose that must survive.', $clean);
+        $this->assertStringNotContainsString('data:image/png', $clean);
+        $this->assertLessThanOrEqual(registration::DESCRIPTION_MAX_BYTES, strlen($clean));
+    }
+
+    /**
+     * An oversized description is cut on a character boundary: a raw substr can
+     * split a multibyte sequence and make the whole payload fail to JSON-encode.
+     * @covers ::sanitize_description
+     */
+    public function test_oversized_description_is_truncated_on_a_character_boundary(): void {
+        $method = new \ReflectionMethod(registration::class, 'sanitize_description');
+        $method->setAccessible(true);
+
+        // 'é' is two bytes, so an odd byte cap lands mid-character without mb_strcut.
+        $clean = $method->invoke(null, str_repeat('é', registration::DESCRIPTION_MAX_BYTES));
+
+        $this->assertLessThanOrEqual(registration::DESCRIPTION_MAX_BYTES, strlen($clean));
+        $this->assertTrue(mb_check_encoding($clean, 'UTF-8'), 'truncation must not split a multibyte character');
+        $this->assertNotFalse(json_encode(['description' => $clean]));
+    }
+
+    /**
+     * If a malformed tag survives stripping, drop the description rather than send
+     * something Core will refuse: losing optional metadata beats never registering.
+     * @covers ::sanitize_description
+     */
+    public function test_a_description_core_would_still_refuse_is_dropped(): void {
+        $method = new \ReflectionMethod(registration::class, 'sanitize_description');
+        $method->setAccessible(true);
+
+        // No closing bracket, so the strip pattern cannot match it.
+        $this->assertSame('', $method->invoke(null, '<img alt="x" src="data:image/png;base64,AAAA'));
+    }
+
+    /**
+     * An ordinary description must pass through untouched.
+     * @covers ::sanitize_description
+     */
+    public function test_an_ordinary_description_is_unchanged(): void {
+        $method = new \ReflectionMethod(registration::class, 'sanitize_description');
+        $method->setAccessible(true);
+
+        $description = '<p>A normal site summary with an <img src="https://example.com/logo.png"> image.</p>';
+
+        $this->assertSame($description, $method->invoke(null, $description));
+        $this->assertNull($method->invoke(null, null));
+        $this->assertSame('', $method->invoke(null, ''));
+    }
+
     public function test_site_registration(): void {
         global $DB, $CFG;
 
