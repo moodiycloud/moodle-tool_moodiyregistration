@@ -1020,6 +1020,13 @@ class registration {
             // intentionally omitted from both developer debugging and automation output.
             // See https://github.com/moodiycloud/moodiy/issues/1107.
             $remotesyncerrorcode = self::classify_remote_sync_error($e);
+            if ($e instanceof remote_registration_exception) {
+                // Core was reached and refused: keep the status it answered with so
+                // automation can tell a refusal (4xx/5xx) from an unreachable Core
+                // (null). On 2026-09-11 three Premium recovery attempts read as
+                // "remote_http_status: 0" while Core had answered 404.
+                $remotehttpstatus = $e->get_http_status();
+            }
             debugging(
                 'Local internal site registration was repaired, but remote sync is pending. Error code: ' .
                 $remotesyncerrorcode,

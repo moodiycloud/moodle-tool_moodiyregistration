@@ -131,7 +131,7 @@ class api {
             throw new coding_exception('Error calling API: ' . $curl->getError());
         } else if (!self::is_success_http_status((int)$info['http_code']) || empty($response['success'])) {
             $message = $response['message'] ?? 'Error during registration';
-            throw new moodle_exception('registrationerror', 'tool_moodiyregistration', '', $message);
+            throw new remote_registration_exception('registrationerror', (int)$info['http_code'], $message);
         } else {
             return self::accept_acknowledged_response($response, (int)$info['http_code'], null, true);
         }
@@ -193,11 +193,11 @@ class api {
             foreach (self::flatten_error_messages($response) as $error) {
                 if (stripos($error, self::ERROR_REGISTRATION_NONEXISTENT) !== false) {
                     // Throw exception to remove registration from moodle.
-                    throw new moodle_exception('errorregistrationupdate', 'tool_moodiyregistration', '', $error);
+                    throw new remote_registration_exception('errorregistrationupdate', (int)$info['http_code'], $error);
                 }
             }
             $message = $response['message'] ?? 'Error during registration update';
-            throw new moodle_exception('errorregistrationupdate', 'tool_moodiyregistration', '', $message);
+            throw new remote_registration_exception('errorregistrationupdate', (int)$info['http_code'], $message);
         } else {
             return self::accept_acknowledged_response(
                 $response,
@@ -260,11 +260,11 @@ class api {
             foreach (self::flatten_error_messages($response) as $error) {
                 if (stripos($error, self::ERROR_REGISTRATION_NONEXISTENT) !== false) {
                     // Throw exception to remove registration from moodle.
-                    throw new moodle_exception('errorunregister', 'tool_moodiyregistration', '', $error);
+                    throw new remote_registration_exception('errorunregister', (int)$info['http_code'], $error);
                 }
             }
             $message = $response['message'] ?? 'Error during un-registration';
-            throw new moodle_exception('errorunregister', 'tool_moodiyregistration', '', $message);
+            throw new remote_registration_exception('errorunregister', (int)$info['http_code'], $message);
         }
         return self::accept_acknowledged_response(
             $response,
