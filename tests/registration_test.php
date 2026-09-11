@@ -677,6 +677,48 @@ final class registration_test extends \advanced_testcase {
     }
 
     /**
+     * Test a refusal from Core keeps the HTTP status Core answered with.
+     * @covers ::repair_internal_site_registration
+     */
+    public function test_repair_internal_site_registration_keeps_the_http_status_of_a_remote_refusal(): void {
+        global $DB, $CFG;
+
+        $this->mark_as_internal_site();
+
+        // Core was reached and said no (the Premium recovery exact-operation fence
+        // answers 404). That is not a transport failure and must not be reported
+        // as one: automation reads remote_http_status to tell the two apart.
+        $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
+        $apiwrapper->method('update_registration')->will(
+            $this->throwException(new \tool_moodiyregistration\remote_registration_exception(
+                'errorregistrationupdate',
+                404,
+                'Site registration update failed.'
+            ))
+        );
+        $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+
+        $result = registration::repair_internal_site_registration('44444444-4444-4444-8444-444444444444');
+        $this->assertDebuggingCalled(
+            'Local internal site registration was repaired, but remote sync is pending. Error code: '
+                . 'remote_registration_failed',
+            DEBUG_DEVELOPER
+        );
+
+        $this->assertSame('ok', $result['status']);
+        $this->assertSame('pending', $result['remote_sync_status']);
+        $this->assertFalse($result['remote_acknowledged']);
+        $this->assertSame(404, $result['remote_http_status']);
+        $this->assertSame('remote_registration_failed', $result['remote_sync_error_code']);
+        $this->assertNull($result['acknowledgement_fingerprint']);
+
+        $record = $DB->get_record('tool_moodiyregistration', [
+            'site_uuid' => '44444444-4444-4444-8444-444444444444',
+        ]);
+        $this->assertNotFalse($record);
+    }
+
+    /**
      * Test an exact local match retries Core after the previous remote call failed.
      * @covers ::repair_internal_site_registration
      */
