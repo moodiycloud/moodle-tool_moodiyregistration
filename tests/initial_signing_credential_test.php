@@ -65,6 +65,30 @@ final class initial_signing_credential_test extends \advanced_testcase {
     }
 
     /**
+     * An exact retry must not rewrite a key after another signed update could rotate it.
+     */
+    public function test_existing_credential_replay_performs_no_database_writes(): void {
+        global $DB;
+        initial_signing_credential::install($this->input);
+        $writes = $DB->perf_get_writes();
+        initial_signing_credential::install($this->input);
+        $this->assertSame($writes, $DB->perf_get_writes());
+    }
+
+    /**
+     * An exact protected static key is already installed and needs no duplicate DB write.
+     */
+    public function test_matching_static_credential_performs_no_database_writes(): void {
+        global $CFG, $DB;
+        $CFG->{api::SIGNING_KEY_CONFIG} = $this->input['registration_signing_secret'];
+        $CFG->{api::SIGNING_KEY_VERSION_CONFIG} = 1;
+        $writes = $DB->perf_get_writes();
+        initial_signing_credential::install($this->input);
+        $this->assertSame($writes, $DB->perf_get_writes());
+        $this->assertFalse(get_config('tool_moodiyregistration', api::SIGNING_KEY_CONFIG));
+    }
+
+    /**
      * Input cannot select another runtime or inject unrecognised material.
      * @dataProvider invalid_input_provider
      * @param string $field Input field.

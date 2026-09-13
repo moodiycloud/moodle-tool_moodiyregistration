@@ -16,6 +16,9 @@
 
 namespace tool_moodiyregistration;
 
+// Repository AGENTS.md requires this guard on domain classes.
+// phpcs:ignore moodle.Files.MoodleInternal.MoodleInternalNotNeeded
+defined('MOODLE_INTERNAL') || die();
 
 /**
  * Installs the first Core credential through the authenticated host provisioning channel.
@@ -82,6 +85,13 @@ class initial_signing_credential {
                 if (!is_string($registereduuid) || !hash_equals($uuid, $registereduuid)) {
                     throw new \invalid_parameter_exception('Existing registration identity conflicts.');
                 }
+            }
+            // Both sources were checked above. An exact existing credential is already
+            // installed. Never rewrite it on replay: a normal signed callback can rotate
+            // the stored key independently after our read, and we must not put the old
+            // version back. Initial delivery writes only when neither source has a key.
+            if ($cfgsecret !== false || $storedsecret !== false) {
+                return;
             }
             $transaction = $DB->start_delegated_transaction();
             set_config(api::SIGNING_KEY_CONFIG, $secret, 'tool_moodiyregistration');
