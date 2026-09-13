@@ -38,3 +38,12 @@
   integration warning while ESLint completed successfully.
 - Deploy Core's v2 verifier/key schema before the source plugin. Newly provisioned managed sites must
   receive the protected pre-seeded key/version; legacy bootstrap is for existing null-key rows only.
+
+
+## 2026-09-13 — Initial Essential key delivery for #1097
+
+- Proven cause: fresh Essential registration receives403/legacy_bootstrap_rejected while its first signing key is absent; Premium already receives the key during provisioning. Keep the historical global compatibility control off.
+- Implemented exact internal tenant validation, raw CFG/stored-key conflict checks, a Moodle lock plus transaction, immutable initial-key replay, private stdin CLI and existing signed callback/acknowledgement.
+- New22 tests/43 assertions pass on real Moodle5.1.5+, PHP8.4.25 and isolated MySQL8.4.11. Coverage includes actual API v2 HMAC bytes, uncertain remote failure with retained key, invalid input, partial/foreign/static conflicts and external-site refusal.
+- Complete plugin suite91 tests/363 assertions passes; existing PHPUnit docblock-metadata deprecations remain. New file Moodle PHPCS passes.
+- Next: review/current-head CI, merge source plugin, let its normal CI propagate into shared runtime, then verify paired Automator/Core deployment and fresh DEV registration. No direct runtime edits or live credential mutation performed by this worktree.
