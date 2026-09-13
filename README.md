@@ -160,3 +160,12 @@ PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
 this program. If not, see <https://www.gnu.org/licenses/>.
+
+
+### Initial Essential credential delivery
+
+`cli/register_internal_site_v2.php` is the private stdin entry point used by the paired authenticated Automator action. It accepts only the exact HTTPS origin/database/protected UUID of an internal hosted site, a 64-character alphanumeric Core signing key and its positive integer version. It checks both raw static and stored credentials, refuses partial/conflicting keys and foreign registration rows, and installs the first key under the Moodle lock and a database transaction. Only an identical retry is accepted; this channel cannot rotate or downgrade a key.
+
+The key is durable before the ordinary v2-signed Core update begins, so uncertain remote outcomes can retry safely. Success still requires an acknowledged 2xx response through the existing CLI proof allowlist. The CLI buffers bootstrap/debugging output and returns no credential, raw response or exception text. The Automator must invoke it with PHP error display/logging and argument traces disabled, bounded private stdin and a process deadline; credentials must never appear in command arguments or environment variables.
+
+Deploy the source plugin through normal plugin CI propagation before enabling the paired Core dispatch control. The historical global legacy-bootstrap control remains off. There is no database schema change and no direct runtime-repository patch. See the paired [Automator contract](https://github.com/vidyamantra/automator_apis_kts/blob/fix/1097-essential-registration-v2/docs/initial-registration-delivery.md).
