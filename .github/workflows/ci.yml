@@ -41,7 +41,7 @@ jobs:
         # 10.11 satisfies every STABLE branch in the matrix (4.5 / 5.0 / 5.1 /
         # 5.2). It does not satisfy Moodle main, which raised its minimum to
         # 11.4.0 -- see the matrix note on the `main` rows.
-        image: mariadb:10.11
+        image: mariadb:13.0
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
