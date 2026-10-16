@@ -407,6 +407,7 @@ class api {
             return $CFG->tool_moodiyregistration_test_curl;
         }
 
+        require_once($CFG->libdir . "/filelib.php");
         return new curl();
     }
 
