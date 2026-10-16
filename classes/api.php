@@ -138,6 +138,63 @@ class api {
     }
 
     /**
+     * Read the current platform usage policy using the existing site-bound key.
+     *
+     * This read never bootstraps, rotates, delivers or updates credentials.
+     * The protected destination UUID wins over a foreign imported DB UUID.
+     *
+     * @return array Current owner-scoped policy metadata.
+     */
+    public static function usage_policy(): array {
+        global $CFG;
+
+        $siteuuid = $CFG->moodiysiteregistrationuuid ?? registration::get_siteuuid();
+        if (!is_string($siteuuid) || $siteuuid === '') {
+            throw new \RuntimeException('The platform usage policy site identity is unavailable.');
+        }
+        $credential = self::get_signing_credential($siteuuid);
+        if ($credential === null) {
+            throw new \RuntimeException('The platform usage policy signing credential is unavailable.');
+        }
+        $timestamp = time();
+        $path = '/api/site/usage-policy';
+        $payload = self::encode_canonical_payload(['site_uuid' => $siteuuid, 'timestamp' => $timestamp]);
+        $headers = array_merge(
+            ['Accept: application/json', 'Content-Type: application/json'],
+            self::build_v2_signature_headers(
+                'POST',
+                $path,
+                $payload,
+                $siteuuid,
+                $credential['secret'],
+                $credential['version'],
+                $timestamp,
+                bin2hex(random_bytes(16))
+            )
+        );
+        $curl = self::get_http_client();
+        $curl->setHeader($headers);
+        $raw = $curl->post(self::get_api_base_url() . $path, $payload, [
+            'CURLOPT_CONNECTTIMEOUT' => 5,
+            'CURLOPT_TIMEOUT' => 15,
+            'CURLOPT_FOLLOWLOCATION' => false,
+            'CURLOPT_MAXREDIRS' => 0,
+        ]);
+        $info = $curl->get_info();
+        $response = json_decode($raw, true);
+        if (
+            $curl->get_errno() || (int)($info['http_code'] ?? 0) !== 200
+            || !is_array($response) || ($response['success'] ?? null) !== true
+            || !is_array($response['data'] ?? null)
+            || ($response['data']['site_uuid'] ?? null) !== $siteuuid
+        ) {
+            throw new \RuntimeException('The current platform usage policy is unavailable.');
+        }
+
+        return $response['data'];
+    }
+
+    /**
      * Update the registration information of the site.
      *
      * @param object $reginfo Registration information.

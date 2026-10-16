@@ -169,3 +169,20 @@ this program. If not, see <https://www.gnu.org/licenses/>.
 The key is durable before the ordinary v2-signed Core update begins, so uncertain remote outcomes can retry safely. Success still requires an acknowledged 2xx response through the existing CLI proof allowlist. The CLI buffers bootstrap/debugging output and returns no credential, raw response or exception text. The Automator must invoke it with PHP error display/logging and argument traces disabled, bounded private stdin and a process deadline; credentials must never appear in command arguments or environment variables.
 
 Deploy the source plugin through normal plugin CI propagation before enabling the paired Core dispatch control. The historical global legacy-bootstrap control remains off. There is no database schema change and no direct runtime-repository patch. See the paired [Automator contract](https://github.com/vidyamantra/automator_apis_kts/blob/fix/1097-essential-registration-v2/docs/initial-registration-delivery.md).
+
+### Signed current Premium user policy
+
+`\tool_moodiyregistration\api::usage_policy()` reads the authenticated site's
+current `essential-v1` user policy from `POST /api/site/usage-policy`. It uses the
+existing destination-bound HMAC-v2 UUID/key and signs the exact request bytes;
+no credential bootstrap, rotation or registration acknowledgement occurs. A
+foreign imported DB UUID/key cannot replace the protected destination identity.
+Transport is bounded and redirects are disabled. Unavailable, malformed or
+foreign-site responses throw without exposing raw server content.
+
+The response carries the current provisioning/import/restore activity floor and
+nullable reserved support identity. The source `local_usage` task validates the
+policy before replacing an observation. Deploy Cloud metadata and the Core
+endpoint before this client, then local_usage, then activate the protected
+Premium policy on an owned DEV fixture. Source CI propagates into runtime; no
+direct `kts_moodle` patch is required. See moodiycloud/moodiy#1343.

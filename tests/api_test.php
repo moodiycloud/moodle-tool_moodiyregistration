@@ -41,6 +41,106 @@ final class api_test extends \advanced_testcase {
     }
 
     /**
+     * Policy reads reuse the protected destination key, even after a foreign DB import.
+     *
+     * @covers ::usage_policy
+     */
+    public function test_usage_policy_signs_exact_body_without_mutating_credentials(): void {
+        global $CFG;
+
+        $siteuuid = 'destination-site-uuid';
+        $secret = str_repeat('d', 64);
+        $CFG->moodiysiteregistrationuuid = $siteuuid;
+        $CFG->{api::SIGNING_KEY_CONFIG} = $secret;
+        $CFG->{api::SIGNING_KEY_VERSION_CONFIG} = 3;
+        $CFG->moodiy_api_url = 'https://core.example';
+        set_config(api::SIGNING_KEY_CONFIG, str_repeat('f', 64), 'tool_moodiyregistration');
+        set_config(api::SIGNING_KEY_VERSION_CONFIG, 99, 'tool_moodiyregistration');
+        set_config(api::SIGNING_SITE_UUID_CONFIG, 'foreign-import-uuid', 'tool_moodiyregistration');
+        $headers = [];
+        $body = '';
+        $curl = $this->getMockBuilder(\curl::class)->disableOriginalConstructor()
+            ->onlyMethods(['setHeader', 'post', 'get_info', 'get_errno'])->getMock();
+        $curl->method('setHeader')->willReturnCallback(function (array $value) use (&$headers): void {
+            $headers = $value;
+        });
+        $curl->expects($this->once())->method('post')->willReturnCallback(function (
+            string $url,
+            string $payload,
+            array $options
+        ) use (
+            &$body,
+            $siteuuid
+): string {
+            $this->assertSame('https://core.example/api/site/usage-policy', $url);
+            $this->assertSame(false, $options['CURLOPT_FOLLOWLOCATION']);
+            $this->assertSame(5, $options['CURLOPT_CONNECTTIMEOUT']);
+            $this->assertSame(15, $options['CURLOPT_TIMEOUT']);
+            $body = $payload;
+
+            return json_encode(['success' => true, 'data' => ['site_uuid' => $siteuuid,
+                'policy_version' => 'essential-v1', 'activity_floor' => 0, 'managed_support_email' => 'support@example.test']]);
+        });
+        $curl->method('get_info')->willReturn(['http_code' => 200]);
+        $curl->method('get_errno')->willReturn(0);
+        $CFG->tool_moodiyregistration_test_curl = $curl;
+
+        $policy = api::usage_policy();
+
+        $named = $this->headers_by_name($headers);
+        $decoded = json_decode($body, true);
+        $canonical = "POST\n/api/site/usage-policy\n" . hash('sha256', $body) . "\n"
+            . $named['X-Moodiy-Timestamp'] . "\n" . $named['X-Moodiy-Nonce'] . "\n3";
+        $this->assertSame($siteuuid, $decoded['site_uuid']);
+        $this->assertSame('3', (string)$named['X-Moodiy-Key-Version']);
+        $this->assertSame(hash_hmac('sha256', $canonical, $secret), $named['X-Moodiy-Signature']);
+        $this->assertSame('essential-v1', $policy['policy_version']);
+        $this->assertSame(str_repeat('f', 64), get_config('tool_moodiyregistration', api::SIGNING_KEY_CONFIG));
+        $this->assertSame('foreign-import-uuid', get_config('tool_moodiyregistration', api::SIGNING_SITE_UUID_CONFIG));
+    }
+
+    /**
+     * A policy read must never fall back to public UUID signing or bootstrap.
+     *
+     * @covers ::usage_policy
+     */
+    public function test_usage_policy_requires_a_bound_v2_credential(): void {
+        global $CFG;
+
+        $CFG->moodiysiteregistrationuuid = 'destination-site-uuid';
+        unset($CFG->{api::SIGNING_KEY_CONFIG}, $CFG->{api::SIGNING_KEY_VERSION_CONFIG});
+        $this->expectException(\RuntimeException::class);
+        api::usage_policy();
+    }
+
+    /**
+     * Missing/foreign responses must not become a current policy.
+     *
+     * @covers ::usage_policy
+     */
+    public function test_usage_policy_rejects_unavailable_or_foreign_response(): void {
+        global $CFG;
+
+        $CFG->moodiysiteregistrationuuid = 'destination-site-uuid';
+        $CFG->{api::SIGNING_KEY_CONFIG} = str_repeat('d', 64);
+        $CFG->{api::SIGNING_KEY_VERSION_CONFIG} = 1;
+        foreach ([[503, '{}'], [200, 'broken-json'], [200, '{"success":true,"data":{"site_uuid":"foreign"}}']] as $case) {
+            $curl = $this->getMockBuilder(\curl::class)->disableOriginalConstructor()
+                ->onlyMethods(['setHeader', 'post', 'get_info', 'get_errno'])->getMock();
+            $curl->method('post')->willReturn($case[1]);
+            $curl->method('get_info')->willReturn(['http_code' => $case[0]]);
+            $curl->method('get_errno')->willReturn(0);
+            $CFG->tool_moodiyregistration_test_curl = $curl;
+            try {
+                api::usage_policy();
+                $this->fail('An unavailable/foreign policy must be rejected.');
+            } catch (\RuntimeException $exception) {
+                $this->assertStringContainsString('unavailable', $exception->getMessage());
+            }
+        }
+    }
+
+    /**
      * Core answers a 422 with `errors` shaped {field: [message, ...]}, so each entry
      * is an ARRAY. Passing one to stripos() raised a TypeError that escaped every
      * `catch (moodle_exception)` around the callers, turning a descriptive
