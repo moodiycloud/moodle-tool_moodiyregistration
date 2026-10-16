@@ -101,6 +101,32 @@ final class api_test extends \advanced_testcase {
     }
 
     /**
+     * An unprotected registration retains its deliberate plugin URL precedence.
+     *
+     * @covers ::usage_policy
+     */
+    public function test_usage_policy_preserves_url_precedence_without_protected_identity(): void {
+        global $CFG, $DB;
+        unset($CFG->moodiysiteregistrationuuid, $CFG->{api::SIGNING_KEY_CONFIG}, $CFG->{api::SIGNING_KEY_VERSION_CONFIG});
+        $siteuuid = 'ordinary-registered-uuid';
+        $DB->insert_record('tool_moodiyregistration', (object)['site_uuid' => $siteuuid]);
+        $CFG->moodiy_api_url = 'https://default-core.example';
+        set_config('apiurl', 'https://registered-core.example/api', 'tool_moodiyregistration');
+        set_config(api::SIGNING_KEY_CONFIG, str_repeat('s', 64), 'tool_moodiyregistration');
+        set_config(api::SIGNING_KEY_VERSION_CONFIG, 1, 'tool_moodiyregistration');
+        set_config(api::SIGNING_SITE_UUID_CONFIG, $siteuuid, 'tool_moodiyregistration');
+        $curl = $this->getMockBuilder(\curl::class)->disableOriginalConstructor()
+            ->onlyMethods(['setHeader', 'post', 'get_info', 'get_errno'])->getMock();
+        $curl->expects($this->once())->method('post')
+            ->with('https://registered-core.example/api/site/usage-policy', $this->anything(), $this->anything())
+            ->willReturn(json_encode(['success' => true, 'data' => ['site_uuid' => $siteuuid]]));
+        $curl->method('get_info')->willReturn(['http_code' => 200]);
+        $curl->method('get_errno')->willReturn(0);
+        $CFG->tool_moodiyregistration_test_curl = $curl;
+        $this->assertSame($siteuuid, api::usage_policy()['site_uuid']);
+    }
+
+    /**
      * A policy read must never fall back to public UUID signing or bootstrap.
      *
      * @covers ::usage_policy

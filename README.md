@@ -185,5 +185,6 @@ The response carries the current provisioning/import/restore activity floor and
 nullable reserved support identity. The source `local_usage` task validates the
 policy before replacing an observation. Deploy Cloud metadata and the Core
 endpoint before this client, then local_usage, then activate the protected
-Premium policy on an owned DEV fixture. Source CI propagates into runtime; no
+Premium policy on an owned DEV fixture. Normal weekly/manual KTS sync CI propagates merged source plugins; verify
+target versions and use the approved certified runtime update; no
 direct `kts_moodle` patch is required. See moodiycloud/moodiy#1343.

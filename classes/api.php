@@ -176,7 +176,8 @@ class api {
         $curl->setHeader($headers);
         // Imported plugin config can name a foreign Core. A protected Premium
         // destination URL must retain custody of this policy read too.
-        $baseurl = is_string($CFG->moodiy_api_url ?? null) && $CFG->moodiy_api_url !== ''
+        $baseurl = is_string($CFG->moodiysiteregistrationuuid ?? null) && $CFG->moodiysiteregistrationuuid === $siteuuid
+            && is_string($CFG->moodiy_api_url ?? null) && $CFG->moodiy_api_url !== ''
             ? rtrim($CFG->moodiy_api_url, '/') : self::get_api_base_url();
         if (substr($baseurl, -4) === '/api') {
             $baseurl = substr($baseurl, 0, -4);
