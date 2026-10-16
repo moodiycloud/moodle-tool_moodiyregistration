@@ -178,7 +178,9 @@ existing destination-bound HMAC-v2 UUID/key and signs the exact request bytes;
 no credential bootstrap, rotation or registration acknowledgement occurs. A
 foreign imported DB UUID/key or API URL cannot replace the protected destination
 identity or Core URL.
-Transport is bounded and redirects are disabled. Unavailable, malformed or
+A missing protected URL uses the built-in first-party default. Policy transport
+requires HTTPS with explicit peer/hostname verification, bounded timeouts and no
+redirects. Unavailable, malformed or
 foreign-site responses throw without exposing raw server content.
 
 The response carries the current provisioning/import/restore activity floor and

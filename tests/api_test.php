@@ -74,6 +74,8 @@ final class api_test extends \advanced_testcase {
             $siteuuid
 ): string {
             $this->assertSame('https://core.example/api/site/usage-policy', $url);
+            $this->assertTrue($options['CURLOPT_SSL_VERIFYPEER']);
+            $this->assertSame(2, $options['CURLOPT_SSL_VERIFYHOST']);
             $this->assertSame(false, $options['CURLOPT_FOLLOWLOCATION']);
             $this->assertSame(5, $options['CURLOPT_CONNECTTIMEOUT']);
             $this->assertSame(15, $options['CURLOPT_TIMEOUT']);
@@ -98,6 +100,48 @@ final class api_test extends \advanced_testcase {
         $this->assertSame('essential-v1', $policy['policy_version']);
         $this->assertSame(str_repeat('f', 64), get_config('tool_moodiyregistration', api::SIGNING_KEY_CONFIG));
         $this->assertSame('foreign-import-uuid', get_config('tool_moodiyregistration', api::SIGNING_SITE_UUID_CONFIG));
+    }
+
+    /**
+     * A missing protected URL uses the built-in first-party origin, never imported config.
+     *
+     * @covers ::usage_policy
+     */
+    public function test_usage_policy_protected_identity_uses_default_origin_when_url_is_absent(): void {
+        global $CFG;
+        $siteuuid = 'protected-default-core-site';
+        $CFG->moodiysiteregistrationuuid = $siteuuid;
+        $CFG->{api::SIGNING_KEY_CONFIG} = str_repeat('s', 64);
+        $CFG->{api::SIGNING_KEY_VERSION_CONFIG} = 1;
+        unset($CFG->moodiy_api_url);
+        set_config('apiurl', 'https://foreign-import.example/api', 'tool_moodiyregistration');
+        $curl = $this->getMockBuilder(\curl::class)->disableOriginalConstructor()
+            ->onlyMethods(['setHeader', 'post', 'get_info', 'get_errno'])->getMock();
+        $curl->expects($this->once())->method('post')
+            ->with(rtrim(api::MOODIY_API_URL, '/') . '/api/site/usage-policy', $this->anything(), $this->anything())
+            ->willReturn(json_encode(['success' => true, 'data' => ['site_uuid' => $siteuuid]]));
+        $curl->method('get_info')->willReturn(['http_code' => 200]);
+        $curl->method('get_errno')->willReturn(0);
+        $CFG->tool_moodiyregistration_test_curl = $curl;
+        $this->assertSame($siteuuid, api::usage_policy()['site_uuid']);
+    }
+
+    /**
+     * A policy response needs authenticated HTTPS even with a valid request signature.
+     *
+     * @covers ::usage_policy
+     */
+    public function test_usage_policy_refuses_plaintext_protected_core_url(): void {
+        global $CFG;
+        $CFG->moodiysiteregistrationuuid = 'protected-plaintext-site';
+        $CFG->{api::SIGNING_KEY_CONFIG} = str_repeat('s', 64);
+        $CFG->{api::SIGNING_KEY_VERSION_CONFIG} = 1;
+        $CFG->moodiy_api_url = 'http://core.example';
+        $curl = $this->getMockBuilder(\curl::class)->disableOriginalConstructor()->onlyMethods(['setHeader', 'post'])->getMock();
+        $curl->expects($this->never())->method('post');
+        $CFG->tool_moodiyregistration_test_curl = $curl;
+        $this->expectException(\RuntimeException::class);
+        api::usage_policy();
     }
 
     /**

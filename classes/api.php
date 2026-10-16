@@ -176,17 +176,29 @@ class api {
         $curl->setHeader($headers);
         // Imported plugin config can name a foreign Core. A protected Premium
         // destination URL must retain custody of this policy read too.
-        $baseurl = is_string($CFG->moodiysiteregistrationuuid ?? null) && $CFG->moodiysiteregistrationuuid === $siteuuid
-            && is_string($CFG->moodiy_api_url ?? null) && $CFG->moodiy_api_url !== ''
-            ? rtrim($CFG->moodiy_api_url, '/') : self::get_api_base_url();
+        $protected = is_string($CFG->moodiysiteregistrationuuid ?? null) && $CFG->moodiysiteregistrationuuid === $siteuuid;
+        $baseurl = $protected
+            ? (is_string($CFG->moodiy_api_url ?? null) && $CFG->moodiy_api_url !== ''
+                ? $CFG->moodiy_api_url : self::MOODIY_API_URL)
+            : self::get_api_base_url();
+        $baseurl = rtrim($baseurl, '/');
         if (substr($baseurl, -4) === '/api') {
             $baseurl = substr($baseurl, 0, -4);
+        }
+        $parts = parse_url($baseurl);
+        if (
+            !is_array($parts) || strtolower($parts['scheme'] ?? '') !== 'https' || empty($parts['host'])
+            || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
+        ) {
+            throw new \RuntimeException('The platform usage policy requires a trusted HTTPS Core endpoint.');
         }
         $raw = $curl->post($baseurl . $path, $payload, [
             'CURLOPT_CONNECTTIMEOUT' => 5,
             'CURLOPT_TIMEOUT' => 15,
             'CURLOPT_FOLLOWLOCATION' => false,
             'CURLOPT_MAXREDIRS' => 0,
+            'CURLOPT_SSL_VERIFYPEER' => true,
+            'CURLOPT_SSL_VERIFYHOST' => 2,
         ]);
         $info = $curl->get_info();
         $response = json_decode($raw, true);
