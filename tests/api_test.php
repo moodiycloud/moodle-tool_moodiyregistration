@@ -54,6 +54,7 @@ final class api_test extends \advanced_testcase {
         $CFG->{api::SIGNING_KEY_CONFIG} = $secret;
         $CFG->{api::SIGNING_KEY_VERSION_CONFIG} = 3;
         $CFG->moodiy_api_url = 'https://core.example';
+        set_config('apiurl', 'https://foreign-import.example/api', 'tool_moodiyregistration');
         set_config(api::SIGNING_KEY_CONFIG, str_repeat('f', 64), 'tool_moodiyregistration');
         set_config(api::SIGNING_KEY_VERSION_CONFIG, 99, 'tool_moodiyregistration');
         set_config(api::SIGNING_SITE_UUID_CONFIG, 'foreign-import-uuid', 'tool_moodiyregistration');

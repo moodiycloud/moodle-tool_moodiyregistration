@@ -174,7 +174,14 @@ class api {
         );
         $curl = self::get_http_client();
         $curl->setHeader($headers);
-        $raw = $curl->post(self::get_api_base_url() . $path, $payload, [
+        // Imported plugin config can name a foreign Core. A protected Premium
+        // destination URL must retain custody of this policy read too.
+        $baseurl = is_string($CFG->moodiy_api_url ?? null) && $CFG->moodiy_api_url !== ''
+            ? rtrim($CFG->moodiy_api_url, '/') : self::get_api_base_url();
+        if (substr($baseurl, -4) === '/api') {
+            $baseurl = substr($baseurl, 0, -4);
+        }
+        $raw = $curl->post($baseurl . $path, $payload, [
             'CURLOPT_CONNECTTIMEOUT' => 5,
             'CURLOPT_TIMEOUT' => 15,
             'CURLOPT_FOLLOWLOCATION' => false,

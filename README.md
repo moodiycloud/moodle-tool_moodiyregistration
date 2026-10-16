@@ -176,7 +176,8 @@ Deploy the source plugin through normal plugin CI propagation before enabling th
 current `essential-v1` user policy from `POST /api/site/usage-policy`. It uses the
 existing destination-bound HMAC-v2 UUID/key and signs the exact request bytes;
 no credential bootstrap, rotation or registration acknowledgement occurs. A
-foreign imported DB UUID/key cannot replace the protected destination identity.
+foreign imported DB UUID/key or API URL cannot replace the protected destination
+identity or Core URL.
 Transport is bounded and redirects are disabled. Unavailable, malformed or
 foreign-site responses throw without exposing raw server content.
 
