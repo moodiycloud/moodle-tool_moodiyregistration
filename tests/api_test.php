@@ -41,6 +41,28 @@ final class api_test extends \advanced_testcase {
     }
 
     /**
+     * A fresh CLI caller has no PHPUnit-preloaded global curl class.
+     *
+     * @covers ::get_http_client
+     */
+    public function test_http_client_loads_moodle_library_in_cold_process(): void {
+        $process = proc_open([
+            PHP_BINARY,
+            __DIR__ . '/fixtures/http_client_cold.php',
+        ], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        $this->assertIsResource($process);
+        $stdout = stream_get_contents($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $this->assertSame(0, proc_close($process), $stderr);
+        $this->assertSame(
+            ['preloaded' => false, 'client' => 'curl', 'repeat' => 'curl'],
+            json_decode($stdout, true, 16, JSON_THROW_ON_ERROR)
+        );
+    }
+
+    /**
      * Policy reads reuse the protected destination key, even after a foreign DB import.
      *
      * @covers ::usage_policy

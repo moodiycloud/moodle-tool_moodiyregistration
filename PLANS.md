@@ -50,3 +50,13 @@
 
 - Review follow-up: exact existing CFG/stored credential replay now performs no database writes. Both new causal tests failed before the fix (+1/+3 writes) and pass afterwards; full Moodle suite93/366 and whole-plugin Moodle PHPCS pass. Required MOODLE_INTERNAL guard retained with a precise style exception for the repository convention.
 - Premium attempt/action review finding does not apply to this already-provisioned Essential registration repair: Core requires the exact active Essential identity and fresh persisted signed acknowledgement; Premium completion separately requires its allowlisted attempt/action ledger binding. No weakening or widening of Premium completion.
+
+## codex #1343 cold CLI HTTP bootstrap (2026-10-16)
+
+- Actual owned DEV runtime6202 passed normal Minor, then standalone native policy readiness failed before any local policy/account writes: api.php410 cannot construct global curl after Moodle config/bootstrap.
+- A fresh normal-cron setup also reproduces the missing class. The HTTP client factory must require Moodle filelib itself; do not mask this in an operator caller or edit the synced runtime.
+- Add a fresh-process regression using real Moodle config-only bootstrap, moodlelib/filelib and the actual production client factory. It asserts curl starts unloaded, constructs the real client twice, and performs no database connection or HTTP request. Baseline source exits255/Class curl not found; fixed source constructs curl twice.
+- Bump source plugin to2026101601/release0.2.3. Full owning plugin/combined usage tests, style/documentation/static gates, exact-head review and complete hosted matrix are required before source merge/normal propagation.
+- The successful targetless Once6202 proof remains valid. A corrected source/runtime needs its own measured publication/DEV descriptor and supported normal installation path before native policy/account acceptance; no invented Moodle point version or global production publication.
+
+- Verification: cold-process baseline fails with the actual missing global class; repaired source creates the real Moodle client twice without DB/HTTP. Registration: 100 tests / 398 assertions. Combined usage + registration: 131 tests / 481 assertions, with six pre-existing usage-task output risky tests and 92 annotation deprecations. PHP lint, Moodle PHPCS (zero warnings), PHPDoc, validation and savepoints pass. Hosted matrix/review and normal runtime propagation remain pending.
