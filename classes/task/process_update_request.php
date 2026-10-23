@@ -34,9 +34,14 @@ class process_update_request extends \core\task\adhoc_task {
     public function execute() {
         \tool_moodiyregistration\registration::update_registration(true);
         if (\tool_moodiyregistration\registration::last_update_was_held()) {
-            // Moodiy held the update (409, moodiycloud/moodiy#1355). This task's own row
-            // de-duplicates a new one, so fail it: Moodle retries it with its fail delay.
-            throw new \moodle_exception('errorregistrationupdate', 'tool_moodiyregistration', '', 'held by Moodiy');
+            // Moodiy held the update (409, moodiycloud/moodiy#1355). This task's own row hides
+            // a new one from queue_update_request_task(), and failing it would retry after
+            // Moodle's one-minute fail delay, inside the hold. Queue the successor directly,
+            // delayed by the hold; this task then completes.
+            $retry = new self();
+            $retry->set_custom_data($this->get_custom_data());
+            $retry->set_next_run_time(time() + \tool_moodiyregistration\registration::HOLD_RETRY_SECONDS);
+            \core\task\manager::queue_adhoc_task($retry);
         }
     }
 }

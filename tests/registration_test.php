@@ -741,10 +741,11 @@ final class registration_test extends \advanced_testcase {
     }
 
     /**
-     * The update request task fails while Core holds the update, so Moodle retries it.
+     * While Core holds the update, the update request task queues its successor after the
+     * hold, not after Moodle's one-minute fail delay, and completes.
      * @covers \tool_moodiyregistration\task\process_update_request::execute
      */
-    public function test_update_request_task_fails_while_core_holds_the_update(): void {
+    public function test_update_request_task_requeues_itself_after_the_hold(): void {
         global $CFG;
 
         $this->registered_site_with_mobile();
@@ -753,13 +754,20 @@ final class registration_test extends \advanced_testcase {
             $this->throwException($this->core_refusal('errorregistrationupdate', 409, 'registration_write_deferred'))
         );
         $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+        $task = new \tool_moodiyregistration\task\process_update_request();
+        $task->set_custom_data(['site_uuid' => 'test-uuid-123456789']);
+        // Queued and run as cron runs it: its own row is pending while it executes.
+        \core\task\manager::queue_adhoc_task($task);
+        $before = time();
 
-        $this->expectException(\moodle_exception::class);
-        try {
-            (new \tool_moodiyregistration\task\process_update_request())->execute();
-        } finally {
-            $this->assertDebuggingCalled();
-        }
+        $this->runAdhocTasks(\tool_moodiyregistration\task\process_update_request::class);
+
+        $this->assertDebuggingCalled();
+        $tasks = \core\task\manager::get_adhoc_tasks(\tool_moodiyregistration\task\process_update_request::class);
+        $this->assertCount(1, $tasks);
+        $queued = reset($tasks);
+        $this->assertSame('test-uuid-123456789', $queued->get_custom_data()->site_uuid);
+        $this->assertGreaterThanOrEqual($before + registration::HOLD_RETRY_SECONDS, $queued->get_next_run_time());
     }
 
     /**
