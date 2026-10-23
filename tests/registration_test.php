@@ -707,6 +707,40 @@ final class registration_test extends \advanced_testcase {
     }
 
     /**
+     * An administrator's update that Core holds is queued to be sent again after the hold.
+     * @covers ::update_manual
+     */
+    public function test_update_manual_held_by_core_queues_a_delayed_retry(): void {
+        global $DB, $CFG;
+
+        $recordid = $this->registered_site_with_mobile();
+        $data = (object)[
+            'site_name' => 'Held Test Moodle Site',
+            'description' => 'Held site description',
+            'admin_email' => 'held_admin@example.com',
+            'country_code' => 'US',
+            'language' => 'en',
+            'privacy' => 'notdisplayed',
+            'organisation_type' => 'university',
+            'policyagreed' => 1,
+        ];
+        $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
+        $apiwrapper->method('update_registration')->will(
+            $this->throwException($this->core_refusal('errorregistrationupdate', 409, 'registration_write_deferred'))
+        );
+        $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+        $before = time();
+
+        $this->assertFalse(registration::update_manual($data));
+
+        $this->assertTrue($DB->record_exists('tool_moodiyregistration', ['id' => $recordid]));
+        $this->assertEquals(1, get_config('tool_moodiymobile', 'enabled'));
+        $tasks = \core\task\manager::get_adhoc_tasks(\tool_moodiyregistration\task\process_update_request::class);
+        $this->assertCount(1, $tasks);
+        $this->assertGreaterThanOrEqual($before + registration::HOLD_RETRY_SECONDS, reset($tasks)->get_next_run_time());
+    }
+
+    /**
      * The update request task fails while Core holds the update, so Moodle retries it.
      * @covers \tool_moodiyregistration\task\process_update_request::execute
      */

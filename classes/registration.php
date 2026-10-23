@@ -540,6 +540,15 @@ class registration {
                     \core\output\notification::NOTIFY_WARNING
                 );
                 return;
+            } else if ($e instanceof remote_registration_exception && $e->is_held()) {
+                // Core held the update (moodiycloud/moodiy#1355). index.php has already saved the
+                // submitted details, so a forced update sends them again after the hold.
+                self::queue_update_request_task((string)$registration->site_uuid, self::HOLD_RETRY_SECONDS);
+                \core\notification::add(
+                    get_string('registrationupdateheld', 'tool_moodiyregistration'),
+                    \core\output\notification::NOTIFY_WARNING
+                );
+                return false;
             } else {
                 \core\notification::add(
                     get_string('errorregistrationupdate', 'tool_moodiyregistration', $e->getMessage()),
@@ -895,8 +904,8 @@ class registration {
                 return;
             }
             if ($e instanceof remote_registration_exception && $e->is_held()) {
-                // moodiycloud/moodiy#1355: Core held the update (a pending app credential
-                // change, a site move or a recovery). Nothing was applied, so it is sent
+                // Core held the update (a pending app credential change, a site move or a
+                // recovery; moodiycloud/moodiy#1355). Nothing was applied, so it is sent
                 // again later instead of waiting for the next version change.
                 self::$lastupdateheld = true;
                 self::queue_update_request_task((string)$registration->site_uuid, self::HOLD_RETRY_SECONDS);
