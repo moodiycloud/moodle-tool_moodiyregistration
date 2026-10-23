@@ -628,6 +628,82 @@ final class api_test extends \advanced_testcase {
     }
 
     /**
+     * Provider of Core refusals and what the plugin reads from them (moodiycloud/moodiy#1355).
+     *
+     * @return array
+     */
+    public static function core_refusal_provider(): array {
+        $text = [
+            'success' => false,
+            'message' => 'Site registration update failed',
+            'errors' => ['error' => 'Site registration does not exist'],
+        ];
+        $hold = [
+            'success' => false,
+            'message' => 'Site registration update failed',
+            'errors' => ['error' => 'Site registration is on hold while another change to this site settles. Retry later.'],
+        ];
+
+        return [
+            'deleted' => [404, $text + ['error_code' => 'site_registration_deleted'], 'site_registration_deleted', true, false],
+            'text without a code (older Core)' => [404, $text, '', false, false],
+            'hold' => [409, $hold + ['error_code' => 'registration_lifecycle_busy'], 'registration_lifecycle_busy', false, true],
+            'text on a hold' => [
+                409,
+                $text + ['error_code' => 'registration_migration_hold'],
+                'registration_migration_hold',
+                false,
+                true,
+            ],
+        ];
+    }
+
+    /**
+     * A refused update carries Core's top-level error_code; only the deleted code may erase.
+     * @covers ::update_registration
+     * @dataProvider core_refusal_provider
+     * @param int $status HTTP status Core answers with.
+     * @param array $body Core's response body.
+     * @param string $code Expected error_code read by the plugin.
+     * @param bool $deleted Whether the refusal says the registration was deleted.
+     * @param bool $held Whether the refusal is a hold.
+     */
+    public function test_update_refusal_carries_core_error_code(
+        int $status,
+        array $body,
+        string $code,
+        bool $deleted,
+        bool $held
+    ): void {
+        global $CFG;
+
+        $siteuuid = 'site-transport-refusal';
+        $CFG->{api::SIGNING_KEY_CONFIG} = 'transport-refusal-secret-0123456789';
+        $CFG->{api::SIGNING_KEY_VERSION_CONFIG} = 4;
+        $CFG->moodiysiteregistrationuuid = $siteuuid;
+        $curl = $this->getMockBuilder(\curl::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['setHeader', 'put', 'get_info', 'get_errno'])
+            ->getMock();
+        $curl->method('put')->willReturn(json_encode($body));
+        $curl->method('get_info')->willReturn(['http_code' => $status]);
+        $curl->method('get_errno')->willReturn(0);
+        $CFG->tool_moodiyregistration_test_curl = $curl;
+        $CFG->moodiy_api_url = 'https://core.example';
+
+        try {
+            api::update_registration((object)['site_uuid' => $siteuuid], ['site_name' => 'Refusal Test']);
+            $this->fail('A refused update must throw.');
+        } catch (remote_registration_exception $e) {
+            $this->assertSame($status, $e->get_http_status());
+            $this->assertSame($code, $e->get_core_error_code());
+            $this->assertSame($deleted, $e->is_registration_deleted());
+            $this->assertSame($held, $e->is_held());
+            $this->assertStringContainsString($body['errors']['error'], $e->getMessage());
+        }
+    }
+
+    /**
      * Test the one-time UUID bootstrap retains the legacy signature bytes and stores the v2 key.
      * @covers ::update_registration
      * @covers ::encode_legacy_signature_payload

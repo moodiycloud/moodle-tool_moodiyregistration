@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.4 - 2026-10-23
+
+- erase the local registration and signing key, and disable mobile, only when Core answers 404/410 with `error_code` `site_registration_deleted`; the text "Site registration does not exist" alone no longer erases (moodiycloud/moodiy#1355)
+- keep everything on an update Core holds (409) and send it again after the hold: a delayed update request, or a failed update-request task that Moodle retries
+
 ## Unreleased
 
 - retry Core registration when the internal-site local UUID and URL already match

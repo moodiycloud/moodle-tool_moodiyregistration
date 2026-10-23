@@ -514,10 +514,10 @@ final class registration_test extends \advanced_testcase {
         $record->timemodified = time() - 86400; // 1 day ago.
         $recordid = $DB->insert_record('tool_moodiyregistration', $record);
 
-        // Create a mock for the api class to simulate "registration does not exist".
+        // Create a mock for the api class to simulate Core saying the registration was deleted.
         $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
         $apiwrapper->method('update_registration')->will(
-            $this->throwException(new \moodle_exception(\tool_moodiyregistration\api::ERROR_REGISTRATION_NONEXISTENT))
+            $this->throwException($this->core_refusal('errorregistrationupdate', 404, 'site_registration_deleted'))
         );
 
         // Set the mock for tests.
@@ -558,7 +558,7 @@ final class registration_test extends \advanced_testcase {
         // Create a mock for the api class.
         $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
         $apiwrapper->expects($this->once())->method('unregister_site')->will(
-            $this->throwException(new \moodle_exception(\tool_moodiyregistration\api::ERROR_REGISTRATION_NONEXISTENT))
+            $this->throwException($this->core_refusal('errorunregister', 404, 'site_registration_deleted'))
         );
 
         // Set the mock for tests.
@@ -573,6 +573,178 @@ final class registration_test extends \advanced_testcase {
         // Verify site is no longer registered.
         $this->assertFalse(registration::is_registered());
         $this->assertEquals(0, $DB->count_records('tool_moodiyregistration'));
+    }
+
+    /**
+     * A refusal Core sends for a registration: its message, HTTP status and top-level `error_code`.
+     *
+     * @param string $errorcode Plugin language string of the failed call.
+     * @param int $status HTTP status.
+     * @param string $corecode Core's `error_code`, '' for a Core that sends none.
+     * @param string $message The message text.
+     * @return remote_registration_exception
+     */
+    private function core_refusal(
+        string $errorcode,
+        int $status,
+        string $corecode,
+        string $message = 'Site registration does not exist'
+    ): remote_registration_exception {
+        return new remote_registration_exception($errorcode, $status, $message, $corecode);
+    }
+
+    /**
+     * Insert a registered site, with mobile enabled and a known last update hash.
+     *
+     * @return int The registration record id.
+     */
+    private function registered_site_with_mobile(): int {
+        global $DB;
+
+        set_config('enabled', 1, 'tool_moodiymobile');
+        set_config(registration::LAST_SUCCESSFUL_UPDATE_HASH, 'existing-hash', 'tool_moodiyregistration');
+
+        return $DB->insert_record('tool_moodiyregistration', (object)[
+            'site_uuid' => 'test-uuid-123456789',
+            'site_url' => 'https://example.moodle.org',
+            'timecreated' => time(),
+            'timemodified' => time() - 86400,
+        ]);
+    }
+
+    /**
+     * Provider of refusals that must never erase the registration (moodiycloud/moodiy#1355).
+     *
+     * Until vidyamantra/core#1990 Core also sent "Site registration does not exist" for
+     * refusals that were only retryable, and 338 sites lost their key that way.
+     *
+     * @return array
+     */
+    public static function refusals_that_keep_the_registration_provider(): array {
+        return [
+            'text without a code (older Core)' => [404, ''],
+            'text on a hold' => [409, 'registration_migration_hold'],
+            'deleted code on a non-404 status' => [500, 'site_registration_deleted'],
+        ];
+    }
+
+    /**
+     * Only Core's explicit `site_registration_deleted` code erases; the text alone never does.
+     * @covers ::update_registration
+     * @dataProvider refusals_that_keep_the_registration_provider
+     * @param int $status HTTP status of the refusal.
+     * @param string $corecode Core's `error_code`.
+     */
+    public function test_update_registration_keeps_the_registration_without_the_deleted_code(int $status, string $corecode): void {
+        global $DB, $CFG;
+
+        $recordid = $this->registered_site_with_mobile();
+        $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
+        $apiwrapper->method('update_registration')->will(
+            $this->throwException($this->core_refusal('errorregistrationupdate', $status, $corecode))
+        );
+        $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+
+        registration::update_registration();
+
+        $this->assertTrue($DB->record_exists('tool_moodiyregistration', ['id' => $recordid]));
+        $this->assertEquals(1, get_config('tool_moodiymobile', 'enabled'));
+        $this->assertSame('existing-hash', get_config('tool_moodiyregistration', registration::LAST_SUCCESSFUL_UPDATE_HASH));
+        $this->assertDebuggingCalled();
+    }
+
+    /**
+     * A plain moodle_exception carrying the text (a transport or local error) never erases.
+     * @covers ::update_registration
+     */
+    public function test_update_registration_keeps_the_registration_on_a_plain_exception_with_the_text(): void {
+        global $DB, $CFG;
+
+        $recordid = $this->registered_site_with_mobile();
+        $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
+        $apiwrapper->method('update_registration')->will(
+            $this->throwException(new \moodle_exception(\tool_moodiyregistration\api::ERROR_REGISTRATION_NONEXISTENT))
+        );
+        $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+
+        registration::update_registration();
+
+        $this->assertTrue($DB->record_exists('tool_moodiyregistration', ['id' => $recordid]));
+        $this->assertEquals(1, get_config('tool_moodiymobile', 'enabled'));
+        $this->assertDebuggingCalled();
+    }
+
+    /**
+     * A held update (409) keeps everything and is queued to be sent again after the hold.
+     * @covers ::update_registration
+     * @covers ::queue_update_request_task
+     */
+    public function test_update_registration_held_by_core_queues_a_delayed_retry(): void {
+        global $DB, $CFG;
+
+        $recordid = $this->registered_site_with_mobile();
+        $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
+        $apiwrapper->method('update_registration')->will($this->throwException($this->core_refusal(
+            'errorregistrationupdate',
+            409,
+            'registration_lifecycle_busy',
+            'Site registration is on hold while another change to this site settles. Retry later.'
+        )));
+        $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+        $before = time();
+
+        registration::update_registration();
+
+        $this->assertTrue(registration::last_update_was_held());
+        $this->assertTrue($DB->record_exists('tool_moodiyregistration', ['id' => $recordid]));
+        $this->assertEquals(1, get_config('tool_moodiymobile', 'enabled'));
+        $this->assertDebuggingCalled();
+        $tasks = \core\task\manager::get_adhoc_tasks(\tool_moodiyregistration\task\process_update_request::class);
+        $this->assertCount(1, $tasks);
+        $task = reset($tasks);
+        $this->assertSame('test-uuid-123456789', $task->get_custom_data()->site_uuid);
+        $this->assertGreaterThanOrEqual($before + registration::HOLD_RETRY_SECONDS, $task->get_next_run_time());
+    }
+
+    /**
+     * The update request task fails while Core holds the update, so Moodle retries it.
+     * @covers \tool_moodiyregistration\task\process_update_request::execute
+     */
+    public function test_update_request_task_fails_while_core_holds_the_update(): void {
+        global $CFG;
+
+        $this->registered_site_with_mobile();
+        $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
+        $apiwrapper->method('update_registration')->will(
+            $this->throwException($this->core_refusal('errorregistrationupdate', 409, 'registration_write_deferred'))
+        );
+        $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+
+        $this->expectException(\moodle_exception::class);
+        try {
+            (new \tool_moodiyregistration\task\process_update_request())->execute();
+        } finally {
+            $this->assertDebuggingCalled();
+        }
+    }
+
+    /**
+     * Unregistering keeps the local registration when Core sends only the text.
+     * @covers ::unregister
+     */
+    public function test_unregister_keeps_the_registration_without_the_deleted_code(): void {
+        global $CFG;
+
+        $this->registered_site_with_mobile();
+        $apiwrapper = $this->createMock(\tool_moodiyregistration\api_wrapper::class);
+        $apiwrapper->expects($this->once())->method('unregister_site')->will(
+            $this->throwException($this->core_refusal('errorunregister', 404, ''))
+        );
+        $CFG->tool_moodiyregistration_test_api_wrapper = $apiwrapper;
+
+        $this->assertFalse(registration::unregister());
+        $this->assertTrue(registration::is_registered());
+        $this->assertEquals(1, get_config('tool_moodiymobile', 'enabled'));
     }
 
     /**

@@ -31,8 +31,14 @@ use moodle_exception;
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class remote_registration_exception extends moodle_exception {
+    /** @var string Core's `error_code` for a registration that was deleted (moodiycloud/moodiy#1355). */
+    public const CORE_REGISTRATION_DELETED = 'site_registration_deleted';
+
     /** @var int HTTP status Core answered with. */
     private int $httpstatus;
+
+    /** @var string Core's top-level machine-readable `error_code`, or '' when Core sent none. */
+    private string $coreerrorcode;
 
     /**
      * Constructor.
@@ -40,10 +46,44 @@ class remote_registration_exception extends moodle_exception {
      * @param string $errorcode Plugin language string identifying the failed call.
      * @param int $httpstatus HTTP status Core answered with.
      * @param string $message Sanitised message for the exception text.
+     * @param string $coreerrorcode Core's top-level `error_code`, or '' when absent.
      */
-    public function __construct(string $errorcode, int $httpstatus, string $message) {
+    public function __construct(string $errorcode, int $httpstatus, string $message, string $coreerrorcode = '') {
         parent::__construct($errorcode, 'tool_moodiyregistration', '', $message);
         $this->httpstatus = $httpstatus;
+        $this->coreerrorcode = $coreerrorcode;
+    }
+
+    /**
+     * Core's top-level `error_code`, or '' when Core sent none.
+     *
+     * @return string
+     */
+    public function get_core_error_code(): string {
+        return $this->coreerrorcode;
+    }
+
+    /**
+     * Whether Core said this registration was deleted, the one answer that may erase it.
+     *
+     * Only the explicit code counts, never the message text: until vidyamantra/core#1990 Core
+     * also sent "Site registration does not exist" for refusals that were only retryable, and
+     * 338 sites erased their signing key that way in October 2026 (moodiycloud/moodiy#1355).
+     *
+     * @return bool
+     */
+    public function is_registration_deleted(): bool {
+        return in_array($this->httpstatus, [404, 410], true)
+            && $this->coreerrorcode === self::CORE_REGISTRATION_DELETED;
+    }
+
+    /**
+     * Whether Core held the request to be sent again later (409): nothing was applied.
+     *
+     * @return bool
+     */
+    public function is_held(): bool {
+        return $this->httpstatus === 409;
     }
 
     /**

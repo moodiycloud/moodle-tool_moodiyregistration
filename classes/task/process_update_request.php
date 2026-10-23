@@ -33,5 +33,10 @@ class process_update_request extends \core\task\adhoc_task {
      */
     public function execute() {
         \tool_moodiyregistration\registration::update_registration(true);
+        if (\tool_moodiyregistration\registration::last_update_was_held()) {
+            // Moodiy held the update (409, moodiycloud/moodiy#1355). This task's own row
+            // de-duplicates a new one, so fail it: Moodle retries it with its fail delay.
+            throw new \moodle_exception('errorregistrationupdate', 'tool_moodiyregistration', '', 'held by Moodiy');
+        }
     }
 }

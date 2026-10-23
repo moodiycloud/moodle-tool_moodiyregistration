@@ -39,7 +39,12 @@ use moodle_url;
 class api {
     /** @var string The Moodiy API URL */
     const MOODIY_API_URL = 'https://api.moodiycloud.com';
-    /** Error message when site registration does not exist. */
+    /**
+     * Core's message for a registration that does not exist.
+     *
+     * Not the erase signal: since 0.2.4 only Core's `error_code` `site_registration_deleted`
+     * erases (remote_registration_exception::is_registration_deleted(), moodiycloud/moodiy#1355).
+     */
     public const ERROR_REGISTRATION_NONEXISTENT = 'site registration does not exist';
     /** Version of the request-signing contract which uses a dedicated secret. */
     public const SIGNATURE_VERSION = '2';
@@ -267,14 +272,7 @@ class api {
         } else if ($response === false) {
             throw new coding_exception('Error calling API: ' . $curl->getError());
         } else if (!self::is_success_http_status((int)$info['http_code']) || empty($response['success'])) {
-            foreach (self::flatten_error_messages($response) as $error) {
-                if (stripos($error, self::ERROR_REGISTRATION_NONEXISTENT) !== false) {
-                    // Throw exception to remove registration from moodle.
-                    throw new remote_registration_exception('errorregistrationupdate', (int)$info['http_code'], $error);
-                }
-            }
-            $message = $response['message'] ?? 'Error during registration update';
-            throw new remote_registration_exception('errorregistrationupdate', (int)$info['http_code'], $message);
+            throw self::refusal('errorregistrationupdate', (int)$info['http_code'], $response, 'Error during registration update');
         } else {
             return self::accept_acknowledged_response(
                 $response,
@@ -334,14 +332,7 @@ class api {
         } else if ($response === false) {
             throw new coding_exception('Error calling API: ' . $curl->getError());
         } else if (!self::is_success_http_status((int)$info['http_code']) || empty($response['success'])) {
-            foreach (self::flatten_error_messages($response) as $error) {
-                if (stripos($error, self::ERROR_REGISTRATION_NONEXISTENT) !== false) {
-                    // Throw exception to remove registration from moodle.
-                    throw new remote_registration_exception('errorunregister', (int)$info['http_code'], $error);
-                }
-            }
-            $message = $response['message'] ?? 'Error during un-registration';
-            throw new remote_registration_exception('errorunregister', (int)$info['http_code'], $message);
+            throw self::refusal('errorunregister', (int)$info['http_code'], $response, 'Error during un-registration');
         }
         return self::accept_acknowledged_response(
             $response,
@@ -725,6 +716,32 @@ class api {
         });
 
         return $messages;
+    }
+
+    /**
+     * The exception for a request Core refused, carrying Core's top-level `error_code`.
+     *
+     * Whether the refusal erases the local registration is decided by that code alone
+     * (remote_registration_exception::is_registration_deleted()), never by the message
+     * text (moodiycloud/moodiy#1355). The text stays in the message for the administrator.
+     *
+     * @param string $errorcode Plugin language string identifying the failed call.
+     * @param int $httpstatus HTTP status Core answered with.
+     * @param array $response Decoded response body.
+     * @param string $fallback Message when Core sent none.
+     * @return remote_registration_exception
+     */
+    private static function refusal(
+        string $errorcode,
+        int $httpstatus,
+        array $response,
+        string $fallback
+    ): remote_registration_exception {
+        $messages = self::flatten_error_messages($response);
+        $message = $messages[0] ?? (is_string($response['message'] ?? null) ? $response['message'] : $fallback);
+        $corecode = is_string($response['error_code'] ?? null) ? $response['error_code'] : '';
+
+        return new remote_registration_exception($errorcode, $httpstatus, $message, $corecode);
     }
 
     /**
