@@ -56,6 +56,12 @@ class registration {
     /** @var string Config key storing the last successful automatic update payload hash. */
     const LAST_SUCCESSFUL_UPDATE_HASH = 'lastsuccessfulupdatehash';
 
+    /** @var int Seconds before an update Moodiy held (409) is sent again; Core's Retry-After. */
+    const HOLD_RETRY_SECONDS = 600;
+
+    /** @var bool Whether the last update_registration() call was held by Moodiy. */
+    protected static $lastupdateheld = false;
+
     /** @var int Maximum allowed age/skew in seconds for signed callback timestamps. */
     const CALLBACK_FRESHNESS_WINDOW = 900;
 
@@ -521,7 +527,7 @@ class registration {
                 \core\output\notification::NOTIFY_SUCCESS
             );
         } catch (moodle_exception $e) {
-            if (stripos($e->getMessage(), \tool_moodiyregistration\api::ERROR_REGISTRATION_NONEXISTENT) !== false) {
+            if (self::registration_deleted_by_core($e)) {
                 self::handle_nonexistent_registration($registration);
                 if (PHPUNIT_TEST) {
                     // In tests we do not redirect, just return.
@@ -534,6 +540,15 @@ class registration {
                     \core\output\notification::NOTIFY_WARNING
                 );
                 return;
+            } else if ($e instanceof remote_registration_exception && $e->is_held()) {
+                // Core held the update (moodiycloud/moodiy#1355). index.php has already saved the
+                // submitted details, so a forced update sends them again after the hold.
+                self::queue_update_request_task((string)$registration->site_uuid, self::HOLD_RETRY_SECONDS);
+                \core\notification::add(
+                    get_string('registrationupdateheld', 'tool_moodiyregistration'),
+                    \core\output\notification::NOTIFY_WARNING
+                );
+                return false;
             } else {
                 \core\notification::add(
                     get_string('errorregistrationupdate', 'tool_moodiyregistration', $e->getMessage()),
@@ -585,7 +600,7 @@ class registration {
             );
             self::$registration = null;
         } catch (moodle_exception $e) {
-            if (stripos($e->getMessage(), \tool_moodiyregistration\api::ERROR_REGISTRATION_NONEXISTENT) !== false) {
+            if (self::registration_deleted_by_core($e)) {
                 self::handle_nonexistent_registration($registration);
                 if (PHPUNIT_TEST) {
                     // In tests we do not redirect, just return.
@@ -845,6 +860,7 @@ class registration {
     public static function update_registration(bool $force = false) {
         global $DB;
 
+        self::$lastupdateheld = false;
         if (!$registration = self::get_registration()) {
             return;
         }
@@ -878,7 +894,7 @@ class registration {
             $event->add_record_snapshot('tool_moodiyregistration', $registration);
             $event->trigger();
         } catch (moodle_exception $e) {
-            if (stripos($e->getMessage(), \tool_moodiyregistration\api::ERROR_REGISTRATION_NONEXISTENT) !== false) {
+            if (self::registration_deleted_by_core($e)) {
                 self::handle_nonexistent_registration($registration);
                 if (PHPUNIT_TEST) {
                     // In tests we do not redirect, just return the response.
@@ -887,9 +903,42 @@ class registration {
                 debugging('Site unregistered from Moodiy side, local registration record deleted.');
                 return;
             }
+            if ($e instanceof remote_registration_exception && $e->is_held()) {
+                // Core held the update (a pending app credential change, a site move or a
+                // recovery; moodiycloud/moodiy#1355). Nothing was applied, so it is sent
+                // again later instead of waiting for the next version change.
+                self::$lastupdateheld = true;
+                self::queue_update_request_task((string)$registration->site_uuid, self::HOLD_RETRY_SECONDS);
+                debugging('Moodiy held the registration update; it will be sent again.');
+                return;
+            }
             debugging('Moodiy registration update failed.');
             return;
         }
+    }
+
+    /**
+     * Whether the last update_registration() call was held by Moodiy (HTTP 409).
+     *
+     * @return bool
+     */
+    public static function last_update_was_held(): bool {
+        return self::$lastupdateheld;
+    }
+
+    /**
+     * Whether Moodiy said this site's registration was deleted, the one refusal that erases it.
+     *
+     * Decided by Core's explicit `error_code`, never by the message text: until
+     * vidyamantra/core#1990 Core also sent "Site registration does not exist" for refusals
+     * that were only retryable, and 338 sites lost their signing key that way in October 2026
+     * (moodiycloud/moodiy#1355).
+     *
+     * @param \Throwable $e The refusal.
+     * @return bool
+     */
+    private static function registration_deleted_by_core(\Throwable $e): bool {
+        return $e instanceof remote_registration_exception && $e->is_registration_deleted();
     }
 
     /**
@@ -1389,9 +1438,10 @@ class registration {
      * Queue a deduplicated ad-hoc update request for the provided site UUID.
      *
      * @param string $siteuuid Site UUID requesting a refresh
+     * @param int $delayseconds Seconds before the task may run; 0 runs it at the next cron
      * @return bool True when a new task was queued, false when an equivalent task already exists
      */
-    public static function queue_update_request_task(string $siteuuid): bool {
+    public static function queue_update_request_task(string $siteuuid, int $delayseconds = 0): bool {
         $siteuuid = trim($siteuuid);
         if ($siteuuid === '' || self::has_pending_update_request_task($siteuuid)) {
             return false;
@@ -1399,6 +1449,9 @@ class registration {
 
         $task = new \tool_moodiyregistration\task\process_update_request();
         $task->set_custom_data(['site_uuid' => $siteuuid]);
+        if ($delayseconds > 0) {
+            $task->set_next_run_time(time() + $delayseconds);
+        }
         // Keep the explicit UUID pre-check for a deterministic boolean return value.
         // queue_adhoc_task(..., true) remains the final race-safe deduplication guard.
         \core\task\manager::queue_adhoc_task($task, true);

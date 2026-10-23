@@ -79,6 +79,7 @@ $string['registrationerror'] = 'An error occurred while attempting to register t
 $string['registrationerrorinvalidurl'] = 'The URL provided is invalid. Please check the URL and try again.';
 $string['registrationinfo'] = 'MoodiyCloud registration information';
 $string['registrationnotice'] = 'This form registers your site with MoodiyCloud. It is separate from Moodle\'s official site registration service.';
+$string['registrationupdateheld'] = 'MoodiyCloud is finishing another change for this site. Your registration update will be sent again automatically in a few minutes.';
 $string['registrationwarning'] = 'Don\'t miss out on important updates and security alerts.';
 $string['reregistration'] = 'Site registration does not exist. Please re-register your site with MoodiyCloud.';
 $string['sendfollowinginfo'] = 'Information shared with MoodiyCloud';
