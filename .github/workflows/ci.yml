@@ -3,15 +3,13 @@
 # Standard Moodle plugin CI, using the official moodlehq/moodle-plugin-ci recipe
 # (https://moodlehq.github.io/moodle-plugin-ci/). Moodle is installed from git for
 # each (branch, php, database) combination, so there is no dependency on prebuilt
-# snapshot images and every check runs per-branch. This lets us test against the
-# in-development Moodle line (the `main` branch), which the Catalyst reusable
-# workflow has no snapshot for.
+# snapshot images and every check runs per-branch. Stable 5.3 and moving
+# upstream main are independent coverage.
 #
 # `main` currently runs on pgsql only -- see the matrix note. Stable branches
 # still cover both databases.
 #
 # Matches the local `make pre-pr` runner, which also uses moodle-plugin-ci.
-# When Moodle branches 5.3 stable, add a `MOODLE_503_STABLE` row to the matrix.
 name: Moodiy Registration CI
 
 on: [push, pull_request]
@@ -22,7 +20,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18
+        image: postgres:${{ matrix.pgsql-ver || '18' }}
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -31,17 +29,9 @@ jobs:
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
 
       mariadb:
-        # Pinned at 10.11 because this self-hosted runner cannot start anything
-        # newer: MariaDB >= 11.x initialises io_uring, and the host sets
-        # `kernel.io_uring_disabled = 2`, so the container dies with EPERM before
-        # the service healthcheck passes. Service containers take docker-run
-        # OPTIONS, not a command, so `innodb_use_native_aio=0` cannot be passed
-        # here to work around it.
-        #
-        # 10.11 satisfies every STABLE branch in the matrix (4.5 / 5.0 / 5.1 /
-        # 5.2). It does not satisfy Moodle main, which raised its minimum to
-        # 11.4.0 -- see the matrix note on the `main` rows.
-        image: mariadb:10.11
+        # Explicit 5.3 rows use the supported 11.4 floor on the actual runner.
+        # Both services start per row; preserve older/main service images.
+        image: mariadb:${{ matrix.mariadb-ver || '10.11' }}
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
@@ -49,7 +39,7 @@ jobs:
           MYSQL_COLLATION_SERVER: "utf8mb4_unicode_ci"
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval 10s --health-timeout 5s --health-retries 3
 
     strategy:
       fail-fast: false
@@ -67,17 +57,12 @@ jobs:
           # Moodle 5.2 (PHP 8.3–8.4)
           - {moodle-branch: 'MOODLE_502_STABLE', php: '8.3', database: 'mariadb'}
           - {moodle-branch: 'MOODLE_502_STABLE', php: '8.4', database: 'pgsql'}
-          # Moodle 5.3dev / main (PHP 8.3–8.4).
-          #
-          # pgsql on BOTH rows, which is a reduction from the original intent of
-          # this workflow (main + mariadb, the case Catalyst's reusable workflow
-          # has no snapshot for). It is a constraint, not a preference: Moodle
-          # main now requires MariaDB >= 11.4.0, and this runner cannot start
-          # any MariaDB >= 11.x at all (io_uring is disabled by sysctl on the
-          # host). There is no version that satisfies both.
-          #
-          # Restore a mariadb row here the moment either side moves: a runner
-          # that permits io_uring, or a Moodle main that runs on 10.11 again.
+          # Stable 5.3 on both PHP/database combinations and supported DB floors.
+          - {moodle-branch: 'MOODLE_503_STABLE', php: '8.3', database: 'pgsql', pgsql-ver: '17', mariadb-ver: '11.4'}
+          - {moodle-branch: 'MOODLE_503_STABLE', php: '8.3', database: 'mariadb', pgsql-ver: '17', mariadb-ver: '11.4'}
+          - {moodle-branch: 'MOODLE_503_STABLE', php: '8.4', database: 'pgsql', pgsql-ver: '17', mariadb-ver: '11.4'}
+          - {moodle-branch: 'MOODLE_503_STABLE', php: '8.4', database: 'mariadb', pgsql-ver: '17', mariadb-ver: '11.4'}
+          # Moving upstream main is separate development coverage, kept pgsql-only.
           - {moodle-branch: 'main', php: '8.3', database: 'pgsql'}
           - {moodle-branch: 'main', php: '8.4', database: 'pgsql'}
 
@@ -110,6 +95,16 @@ jobs:
         env:
           DB: ${{ matrix.database }}
           MOODLE_BRANCH: ${{ matrix.moodle-branch }}
+
+      - name: Record tested runtime and plugin
+        run: |
+          git -C moodle rev-parse HEAD
+          git -C plugin rev-parse HEAD
+          root=moodle
+          if [ -f moodle/public/version.php ]; then root=moodle/public; fi
+          grep -E '^[$](release|version|branch)[[:space:]]*=' "$root/version.php"
+          grep -E '^[$]plugin->(component|version|requires|supported)[[:space:]]*=' \
+            "$root/admin/tool/moodiyregistration/version.php"
 
       - name: PHP Lint
         if: ${{ !cancelled() }}
