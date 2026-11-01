@@ -40,12 +40,14 @@ is the broader repo-level PHPCS sweep when you only need coding-style feedback.
 Plan, prerequisites, and per-step explanation: [`moodle-plugin-quality-toolkit.md`](../moodle-plugin-quality-toolkit.md).
 ## GitHub Actions CI
 
-GitHub Actions CI uses Catalyst's reusable Moodle workflow
-(`.github/workflows/ci.yml`). `phplint`, `phpcs`, `phpdoc`, `validate`,
-`savepoints`, `mustache`, and `phpunit` run with
-`codechecker_max_warnings: 0`. `behat`, `grunt`, and the reusable workflow's
-`release` job remain disabled. Publishing is handled separately by
-`.github/workflows/moodle-release.yml`.
+GitHub Actions CI uses the standalone official `moodle-plugin-ci` recipe in
+`.github/workflows/ci.yml`. Each matrix case installs Moodle and the plugin from
+source, then runs PHP lint, PHPCS/PHPDoc with zero allowed warnings, validation,
+savepoints, Mustache, Grunt, PHPUnit and Behat. PHP Mess Detector is informational.
+Stable 5.3 has explicit PHP 8.3/8.4 cases on PostgreSQL 17 and MariaDB 11.4;
+moving main remains separate PostgreSQL development coverage. CI records exact
+Moodle/plugin commits and installed version fields before checks. Publishing is
+handled separately by `.github/workflows/moodle-release.yml`.
 
 ## Architecture
 
